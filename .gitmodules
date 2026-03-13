@@ -1,3 +1,6 @@
 [submodule "sembed-rs"]
 	path = sembed-rs
 	url = git@github.com:aeronmiles/sembed-rs.git
+[submodule "tui-md"]
+	path = tui-md
+	url = git@github.com:aeronmiles/tui-md.git
