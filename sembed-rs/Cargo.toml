@@ -1,0 +1,26 @@
+[package]
+name = "sembed-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal, provider-agnostic semantic embeddings library"
+license = "MIT"
+
+[lib]
+name = "sembed_rs"
+path = "src/lib.rs"
+
+[dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Hashing
+sha2 = "0.10"
+
+# HTTP client (for embedding providers)
+ureq = { version = "3", features = ["json"] }
+
+# Error handling
+thiserror = "2"
+
+[dev-dependencies]

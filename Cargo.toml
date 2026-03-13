@@ -1,0 +1,61 @@
+[workspace]
+members = [".", "sembed-rs", "tui-md"]
+
+[package]
+name = "kanban-mdx"
+version = "0.1.0"
+edition = "2021"
+description = "A file-based Kanban tool powered by Markdown"
+
+[[bin]]
+name = "kanban-md"
+path = "src/main.rs"
+
+[dependencies]
+# Semantic embeddings
+sembed-rs = { path = "sembed-rs" }
+
+# Markdown rendering (sub-crate)
+tui-md = { path = "tui-md" }
+
+# CLI
+clap = { version = "4.6.0", features = ["derive", "env"] }
+clap_complete = "4.6.0"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_yml = "0.0.12"
+serde_json = "1"
+toml = "0.8"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# TUI
+ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
+crossterm = "0.29"
+
+# Error handling
+color-eyre = "0.6"
+thiserror = "2"
+
+# File system
+walkdir = "2"
+notify = "8.2.0"
+fslock = "0.2"
+
+# Output
+comfy-table = "7"
+colored = "3"
+
+# Hashing
+sha2 = "0.10"
+
+# Regex
+regex = "1"
+
+# Utilities
+rand = "0.10.0"
+
+[dev-dependencies]
+tempfile = "3"
