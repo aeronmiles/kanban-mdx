@@ -1,0 +1,3 @@
+[submodule "sembed-rs"]
+	path = sembed-rs
+	url = git@github.com:aeronmiles/sembed-rs.git
