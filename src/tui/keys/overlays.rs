@@ -7,6 +7,21 @@ impl App {
 
     pub(crate) fn handle_help_key(&mut self, key: KeyEvent) {
         if self.help_filter_active {
+            // Ctrl modifiers first (prevents Ctrl+W from typing 'w').
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                match key.code {
+                    KeyCode::Char('w') => {
+                        delete_word_back(&mut self.help_filter);
+                        self.help_scroll = 0;
+                    }
+                    KeyCode::Char('u') => {
+                        self.help_filter.clear();
+                        self.help_scroll = 0;
+                    }
+                    _ => {}
+                }
+                return;
+            }
             // Filter input mode.
             match key.code {
                 KeyCode::Esc => {

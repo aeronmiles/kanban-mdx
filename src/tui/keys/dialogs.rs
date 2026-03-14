@@ -13,6 +13,20 @@ impl App {
         }
 
         if self.picker.move_filter_active {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                match key.code {
+                    KeyCode::Char('w') => {
+                        delete_word_back(&mut self.picker.move_filter);
+                        self.picker.move_cursor = 0;
+                    }
+                    KeyCode::Char('u') => {
+                        self.picker.move_filter.clear();
+                        self.picker.move_cursor = 0;
+                    }
+                    _ => {}
+                }
+                return;
+            }
             match key.code {
                 KeyCode::Esc => {
                     self.picker.move_filter.clear();
