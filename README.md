@@ -1,4 +1,4 @@
-# kanban-md
+# kanban-mdx (kbmdx)
 
 A file-based Kanban tool powered by Markdown. Tasks are individual `.md` files with YAML frontmatter, managed through a CLI and terminal UI. No database required — everything lives in your repo and works with git out of the box.
 

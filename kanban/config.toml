@@ -68,7 +68,7 @@ sort_mode = 1
 reader_max_width = 120
 reader_width_pct = 70
 brightness = -0.000000007450580596923828
-saturation = -0.30000001192092896
+saturation = -0.000000014901161193847656
 
 [[tui.age_thresholds]]
 after = "0s"
