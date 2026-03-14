@@ -1,4 +1,4 @@
-//! `kanban-md embed` — manage semantic search embeddings.
+//! `kbmdx embed` — manage semantic search embeddings.
 //!
 //! Subcommands:
 //! - `sync`   — generate/update embeddings for all tasks
@@ -121,6 +121,10 @@ fn run_status(cli: &Cli) -> Result<(), CliError> {
                 writeln!(stdout, "Model:           {}", status.model)
                     .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
             }
+            if status.dimensions > 0 {
+                writeln!(stdout, "Dimensions:      {}", status.dimensions)
+                    .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
+            }
             if !status.index_file.is_empty() {
                 writeln!(
                     stdout,
@@ -135,7 +139,7 @@ fn run_status(cli: &Cli) -> Result<(), CliError> {
             } else {
                 writeln!(
                     stdout,
-                    "Index:           not created (run 'kanban-md embed sync')"
+                    "Index:           not created (run 'kbmdx embed sync')"
                 )
                 .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
             }
@@ -164,6 +168,9 @@ fn run_clear(cli: &Cli) -> Result<(), CliError> {
             format!("removing index: {e}"),
         )
     })?;
+    // Remove WAL/SHM sidecar files if present.
+    let _ = std::fs::remove_file(index_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(index_path.with_extension("db-shm"));
 
     use std::io::Write;
     writeln!(
@@ -242,7 +249,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut cfg = Config::new_default("test");
         cfg.set_dir(dir.path().to_path_buf());
-        // semantic_search is disabled by default
         assert!(!cfg.semantic_search.enabled);
 
         let status = embed::get_status(&cfg);
@@ -262,7 +268,6 @@ mod tests {
         cfg.semantic_search.provider = "voyage".to_string();
         cfg.semantic_search.model = "voyage-3-lite".to_string();
 
-        // No .embeddings.json exists in the temp dir
         let status = embed::get_status(&cfg);
         assert!(status.enabled);
         assert_eq!(status.provider, "voyage");
@@ -277,18 +282,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let index_path = dir.path().join(embed::INDEX_FILE);
 
-        // Create a populated index and save it to disk.
-        let idx = sembed_rs::Index::new();
-        let doc = sembed_rs::Document {
-            id: "1:0".to_string(),
-            content: "hello world".to_string(),
-            content_hash: "abc123".to_string(),
-            vector: vec![1.0, 0.0, 0.0],
-            metadata: std::collections::HashMap::new(),
-        };
-        idx.add(vec![doc]);
-        let f = std::fs::File::create(&index_path).unwrap();
-        idx.save(f).unwrap();
+        // Create a populated SQLite index.
+        let store = sembed_rs::SqliteStore::open(&index_path).unwrap();
+        sembed_rs::Store::upsert(
+            &store,
+            &[sembed_rs::Document {
+                id: "1:0".to_string(),
+                content: "hello world".to_string(),
+                content_hash: "abc123".to_string(),
+                vector: vec![1.0, 0.0, 0.0],
+                metadata: std::collections::HashMap::new(),
+            }],
+        )
+        .unwrap();
+        drop(store);
 
         let mut cfg = Config::new_default("test");
         cfg.set_dir(dir.path().to_path_buf());
@@ -309,19 +316,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let index_path = dir.path().join(embed::INDEX_FILE);
 
-        let idx = sembed_rs::Index::new();
-        for i in 0..5 {
-            let doc = sembed_rs::Document {
+        let store = sembed_rs::SqliteStore::open(&index_path).unwrap();
+        let docs: Vec<sembed_rs::Document> = (0..5)
+            .map(|i| sembed_rs::Document {
                 id: format!("{}:0", i),
                 content: format!("task {}", i),
                 content_hash: format!("hash_{}", i),
                 vector: vec![i as f32, 0.0],
                 metadata: std::collections::HashMap::new(),
-            };
-            idx.add(vec![doc]);
-        }
-        let f = std::fs::File::create(&index_path).unwrap();
-        idx.save(f).unwrap();
+            })
+            .collect();
+        sembed_rs::Store::upsert(&store, &docs).unwrap();
+        drop(store);
 
         let mut cfg = Config::new_default("test");
         cfg.set_dir(dir.path().to_path_buf());
@@ -335,31 +341,28 @@ mod tests {
 
     #[test]
     fn test_get_status_disabled_skips_document_count() {
-        // Even when an index file exists, if semantic_search is disabled,
-        // get_status should not count documents.
         let dir = tempfile::tempdir().unwrap();
         let index_path = dir.path().join(embed::INDEX_FILE);
 
-        let idx = sembed_rs::Index::new();
-        let doc = sembed_rs::Document {
-            id: "1:0".to_string(),
-            content: "hello".to_string(),
-            content_hash: "abc".to_string(),
-            vector: vec![1.0],
-            metadata: std::collections::HashMap::new(),
-        };
-        idx.add(vec![doc]);
-        let f = std::fs::File::create(&index_path).unwrap();
-        idx.save(f).unwrap();
+        let store = sembed_rs::SqliteStore::open(&index_path).unwrap();
+        sembed_rs::Store::upsert(
+            &store,
+            &[sembed_rs::Document {
+                id: "1:0".to_string(),
+                content: "hello".to_string(),
+                content_hash: "abc".to_string(),
+                vector: vec![1.0],
+                metadata: std::collections::HashMap::new(),
+            }],
+        )
+        .unwrap();
+        drop(store);
 
         let mut cfg = Config::new_default("test");
         cfg.set_dir(dir.path().to_path_buf());
-        // semantic_search.enabled is false by default
 
         let status = embed::get_status(&cfg);
         assert!(!status.enabled);
-        // The index file exists, so index_file/file_size_bytes are populated,
-        // but documents is 0 because get_status skips loading when disabled.
         assert!(!status.index_file.is_empty());
         assert!(status.file_size_bytes > 0);
         assert_eq!(status.documents, 0);
@@ -373,7 +376,8 @@ mod tests {
             enabled: true,
             provider: "voyage".to_string(),
             model: "voyage-3".to_string(),
-            index_file: "/tmp/test/.embeddings.json".to_string(),
+            dimensions: 1024,
+            index_file: "/tmp/test/.embeddings.db".to_string(),
             documents: 42,
             file_size_bytes: 12345,
             last_sync: "2026-01-15T10:30:00Z".to_string(),
@@ -393,6 +397,7 @@ mod tests {
             enabled: false,
             provider: String::new(),
             model: String::new(),
+            dimensions: 0,
             index_file: String::new(),
             documents: 0,
             file_size_bytes: 0,

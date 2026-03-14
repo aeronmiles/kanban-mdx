@@ -1,4 +1,4 @@
-//! `kanban-md import` — bulk-create tasks from a JSON or YAML spec.
+//! `kbmdx import` — bulk-create tasks from a JSON or YAML spec.
 //!
 //! Creates multiple tasks at once from a structured input file.
 //! Tasks can reference each other via local "ref" IDs, and dependencies

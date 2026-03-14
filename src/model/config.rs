@@ -17,7 +17,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("no kanban board found (run 'kanban-md init' to create one)")]
+    #[error("no kanban board found (run 'kbmdx init' to create one)")]
     NotFound,
 
     #[error("invalid config: {0}")]
@@ -38,7 +38,7 @@ pub enum ConfigError {
 // ---------------------------------------------------------------------------
 
 /// Default kanban directory name.
-pub const DEFAULT_DIR: &str = "kanban";
+pub const DEFAULT_DIR: &str = ".kbmdx";
 /// Default tasks subdirectory name.
 pub const DEFAULT_TASKS_DIR: &str = "tasks";
 /// Default status for new tasks.

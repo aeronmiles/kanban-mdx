@@ -1,4 +1,4 @@
-//! `kanban-md migrate-config` — convert config.yml (YAML) to config.toml (TOML).
+//! `kbmdx migrate-config` — convert config.yml (YAML) to config.toml (TOML).
 
 use std::io::Write;
 

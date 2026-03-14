@@ -1,4 +1,4 @@
-//! `kanban-md create` — create a new task.
+//! `kbmdx create` — create a new task.
 
 use std::io::Write;
 

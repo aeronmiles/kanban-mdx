@@ -1,4 +1,4 @@
-//! `kanban-md archive` — archive one or more completed tasks.
+//! `kbmdx archive` — archive one or more completed tasks.
 
 use std::io::Write;
 use chrono::Utc;

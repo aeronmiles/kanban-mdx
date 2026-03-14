@@ -1,4 +1,4 @@
-//! `kanban-md branch-check` — validate branch setup for the current worktree/branch.
+//! `kbmdx branch-check` — validate branch setup for the current worktree/branch.
 //!
 //! Checks whether the current git branch matches the task's expected branch,
 //! using both convention matching (task/<ID>-<description>) and exact branch match.

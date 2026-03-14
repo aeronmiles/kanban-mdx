@@ -1,4 +1,4 @@
-//! `kanban-md deps` — show task dependencies.
+//! `kbmdx deps` — show task dependencies.
 
 use std::io::Write;
 

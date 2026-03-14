@@ -1,4 +1,4 @@
-//! `kanban-md tui` — launch the terminal UI.
+//! `kbmdx tui` — launch the terminal UI.
 
 use crate::cli::root::Cli;
 use crate::error::{CliError, ErrorCode};

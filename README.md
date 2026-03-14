@@ -22,36 +22,36 @@ A file-based Kanban tool powered by Markdown. Tasks are individual `.md` files w
 cargo install --path .
 ```
 
-Binary name: `kanban-md`
+Binary name: `kbmdx`
 
 ## Quick start
 
 ```sh
 # Initialize a board in the current directory
-kanban-md init "My Project"
+kbmdx init "My Project"
 
 # Create tasks
-kanban-md create "Design the API" --priority high --tags api,design
-kanban-md create "Implement auth" --depends-on 1
+kbmdx create "Design the API" --priority high --tags api,design
+kbmdx create "Implement auth" --depends-on 1
 
 # Move through the workflow
-kanban-md move 1 in-progress --claim alice
-kanban-md move 1 done
+kbmdx move 1 in-progress --claim alice
+kbmdx move 1 done
 
 # View the board
-kanban-md board
-kanban-md list --status in-progress
+kbmdx board
+kbmdx list --status in-progress
 
 # Launch the TUI
-kanban-md tui
+kbmdx tui
 ```
 
 ## Task format
 
-Tasks are stored as markdown files in `kanban/tasks/`:
+Tasks are stored as markdown files in `.kbmdx/tasks/`:
 
 ```
-kanban/tasks/001-design-the-api.md
+.kbmdx/tasks/001-design-the-api.md
 ```
 
 ```markdown
@@ -138,7 +138,7 @@ All fields except `id`, `title`, and `status` are optional.
 
 ## Terminal UI
 
-Launch with `kanban-md tui`. The TUI provides:
+Launch with `kbmdx tui`. The TUI provides:
 
 - **Kanban board** — Columns by status with task cards, age-based coloring, and WIP indicators
 - **Detail panel** — Full markdown rendering of task body via [tui-md](https://github.com/aeronmiles/tui-md) with syntax highlighting
@@ -151,7 +151,7 @@ Launch with `kanban-md tui`. The TUI provides:
 
 ## Configuration
 
-Board configuration lives in `kanban/config.toml`:
+Board configuration lives in `.kbmdx/config.toml`:
 
 ```toml
 version = 15
@@ -233,7 +233,7 @@ model = "voyage-3"
 
 ```
 project/
-└── kanban/
+└── .kbmdx/
     ├── config.toml          # Board configuration
     ├── tasks/               # Task markdown files
     │   ├── 001-task-slug.md
@@ -241,13 +241,13 @@ project/
     │   └── ...
     ├── activity.jsonl       # Mutation log (max 10,000 entries)
     ├── undo.jsonl           # Undo snapshots (max 100)
-    ├── .embeddings.json     # Semantic search index
+    ├── .embeddings.db       # Semantic search index (SQLite)
     └── .lock                # File lock
 ```
 
 ## Git integration
 
-kanban-md is designed for git-based workflows:
+kbmdx is designed for git-based workflows:
 
 - **Branch context** — Link tasks to branches via `branch` field or `task/ID-*` naming convention. The `list` and `tui` views can filter to the current branch's context, showing the linked task plus its parent, siblings, and dependencies.
 - **Worktree support** — Tasks can reference worktree paths. `worktrees --check` detects stale metadata and orphaned worktrees.
@@ -259,15 +259,15 @@ Enable optional vector search for finding tasks by meaning rather than keyword:
 
 ```sh
 # Configure in config.toml
-kanban-md config --set semantic_search.enabled true
-kanban-md config --set semantic_search.provider voyage
-kanban-md config --set semantic_search.model voyage-3
+kbmdx config --set semantic_search.enabled true
+kbmdx config --set semantic_search.provider voyage
+kbmdx config --set semantic_search.model voyage-3
 
 # Build the index
-kanban-md embed sync
+kbmdx embed sync
 
 # Search
-kanban-md find "authentication flow"
+kbmdx find "authentication flow"
 ```
 
 Supported providers: Voyage AI, Ollama, OpenAI (via [sembed-rs](https://github.com/aeronmiles/sembed-rs)).

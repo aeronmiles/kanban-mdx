@@ -364,6 +364,9 @@ pub struct Column {
     pub tasks: Vec<Task>,
     pub collapsed: bool,
     pub scroll_offset: usize,
+    /// Per-column cursor position so switching columns preserves each column's
+    /// selected task independently.
+    pub active_row: usize,
 }
 
 impl Column {
@@ -698,6 +701,12 @@ pub struct JumpEntry {
 }
 
 impl JumpEntry {
+    /// Whether two entries represent the same navigation destination
+    /// (same view + task_id, ignoring scroll/fold/layout state).
+    fn same_destination(&self, other: &JumpEntry) -> bool {
+        self.view == other.view && self.task_id == other.task_id
+    }
+
     /// Serialize to a tab-delimited string.
     /// Format: `view\ttask_id\tcol\trow\tscroll\tfold\tcollapsed_csv`
     fn serialize(&self) -> String {
@@ -804,20 +813,67 @@ impl JumpList {
 
     /// Push a new entry, truncating any forward history.
     ///
-    /// Deduplicates: removes any earlier entry for the same destination
-    /// (same view + task_id) so the stack contains at most one entry per
-    /// context. This collapses ping-pong patterns like `[A,B,A,B]` into
-    /// `[B,A]` while keeping board and detail as distinct destinations.
+    /// Before inserting, collapses any trailing ping-pong pattern
+    /// (e.g. `A,B,A,B,A` → `A`) so that "back" skips redundant bouncing
+    /// and reaches the previous *distinct* destination directly.
+    /// Also deduplicates any remaining earlier entry for the same
+    /// destination as the new entry.
     pub fn push(&mut self, entry: JumpEntry) {
         self.entries.truncate(self.cursor);
+        self.sanitize_pingpong();
         // Remove earlier entries for the same destination (view + task_id).
-        self.entries.retain(|e| e.view != entry.view || e.task_id != entry.task_id);
+        self.entries.retain(|e| !e.same_destination(&entry));
         self.entries.push(entry);
         if self.entries.len() > self.max_entries {
             self.entries.remove(0);
         }
         self.cursor = self.entries.len();
         self.save();
+    }
+
+    /// Collapse a trailing ping-pong pattern in the entries list.
+    ///
+    /// A ping-pong is 3+ consecutive entries that alternate between exactly
+    /// two destinations: `[…, X, A, B, A, B, A]`.  The alternating run
+    /// `A, B, A, B, A` is collapsed to its final entry `A`, so going back
+    /// skips the redundant bouncing and reaches `X` directly.
+    fn sanitize_pingpong(&mut self) {
+        let len = self.entries.len();
+        if len < 3 {
+            return;
+        }
+
+        let last = len - 1;
+        // The two candidate ping-pong destinations (Copy types).
+        let a_view = self.entries[last].view;
+        let a_tid = self.entries[last].task_id;
+        let b_view = self.entries[last - 1].view;
+        let b_tid = self.entries[last - 1].task_id;
+
+        // Must be two distinct destinations to form a ping-pong.
+        if a_view == b_view && a_tid == b_tid {
+            return;
+        }
+
+        // Walk backwards checking if entries continue alternating a ↔ b.
+        let mut start = last - 1;
+        for i in (0..last - 1).rev() {
+            let (ev, et) = if (last - i) % 2 == 0 {
+                (a_view, a_tid)
+            } else {
+                (b_view, b_tid)
+            };
+            if self.entries[i].view == ev && self.entries[i].task_id == et {
+                start = i;
+            } else {
+                break;
+            }
+        }
+
+        if last - start + 1 >= 3 {
+            // Drain everything except the final entry of the run.
+            self.entries.drain(start..last);
+        }
     }
 
     /// Update the entry at cursor in-place without forking forward history.
@@ -1182,6 +1238,7 @@ impl App {
                 tasks: Vec::new(),
                 collapsed: false,
                 scroll_offset: 0,
+                active_row: 0,
             })
             .collect();
 
@@ -1870,6 +1927,24 @@ impl App {
 
     // ── Navigation helpers ──────────────────────────────────────────
 
+    /// Save `active_row` into the current column, switch `active_col` to
+    /// `new_col`, and restore that column's saved cursor.  Every column
+    /// switch must go through this so per-column cursors stay in sync.
+    pub(crate) fn switch_col(&mut self, new_col: usize) {
+        // Save current cursor into the column we're leaving.
+        if let Some(col) = self.columns.get_mut(self.active_col) {
+            col.active_row = self.active_row;
+        }
+        self.active_col = new_col;
+        // Restore saved cursor from the column we're entering.
+        self.active_row = self
+            .columns
+            .get(self.active_col)
+            .map(|c| c.active_row)
+            .unwrap_or(0);
+        self.clamp_active_row();
+    }
+
     pub(crate) fn move_col_left(&mut self) {
         if self.columns.is_empty() {
             return;
@@ -1879,8 +1954,7 @@ impl App {
         for _ in 0..len {
             col = if col == 0 { len - 1 } else { col - 1 };
             if !self.columns[col].collapsed {
-                self.active_col = col;
-                self.clamp_active_row();
+                self.switch_col(col);
                 return;
             }
         }
@@ -1895,8 +1969,7 @@ impl App {
         for _ in 0..len {
             col = if col + 1 >= len { 0 } else { col + 1 };
             if !self.columns[col].collapsed {
-                self.active_col = col;
-                self.clamp_active_row();
+                self.switch_col(col);
                 return;
             }
         }
@@ -1912,8 +1985,7 @@ impl App {
             for (i, col) in self.columns.iter_mut().enumerate() {
                 col.collapsed = i != prev;
             }
-            self.active_col = prev;
-            self.clamp_active_row();
+            self.switch_col(prev);
             self.persist_collapsed();
         } else {
             self.move_col_left();
@@ -1930,8 +2002,7 @@ impl App {
             for (i, col) in self.columns.iter_mut().enumerate() {
                 col.collapsed = i != next;
             }
-            self.active_col = next;
-            self.clamp_active_row();
+            self.switch_col(next);
             self.persist_collapsed();
         } else {
             self.move_col_right();
@@ -1954,13 +2025,13 @@ impl App {
             &context_ids,
             self.time_mode.label(),
         );
-        let filtered_ids: Vec<i32> = filtered.iter().map(|t| t.id).collect();
-        let indices: Vec<usize> = col
-            .tasks
+        // Map filtered tasks back to col.tasks indices, preserving the
+        // filtered order (which may differ from original — e.g. semantic
+        // ranking).  Navigation must follow this order so that j/k moves
+        // through tasks in the same sequence the user sees on screen.
+        let indices: Vec<usize> = filtered
             .iter()
-            .enumerate()
-            .filter(|(_, t)| filtered_ids.contains(&t.id))
-            .map(|(i, _)| i)
+            .filter_map(|ft| col.tasks.iter().position(|t| t.id == ft.id))
             .collect();
         Some(indices)
     }
@@ -1973,15 +2044,7 @@ impl App {
             let cur_pos = indices.iter().position(|&i| i == self.active_row);
             match cur_pos {
                 Some(p) => {
-                    if amount == 1 && p + 1 >= indices.len() {
-                        // Wrap to first visible task.
-                        self.active_row = indices[0];
-                        if let Some(col) = self.columns.get_mut(self.active_col) {
-                            col.scroll_offset = 0;
-                        }
-                    } else {
-                        self.active_row = indices[(p + amount).min(indices.len() - 1)];
-                    }
+                    self.active_row = indices[(p + amount).min(indices.len() - 1)];
                 }
                 None => {
                     // Not on a visible task — snap to next visible one downward.
@@ -1995,15 +2058,7 @@ impl App {
             return;
         }
         let last = self.last_row_index();
-        if amount == 1 && self.active_row >= last {
-            // Wrap to top.
-            self.active_row = 0;
-            if let Some(col) = self.columns.get_mut(self.active_col) {
-                col.scroll_offset = 0;
-            }
-        } else {
-            self.active_row = (self.active_row + amount).min(last);
-        }
+        self.active_row = (self.active_row + amount).min(last);
     }
 
     pub(crate) fn move_row_up(&mut self, amount: usize) {
@@ -2014,15 +2069,7 @@ impl App {
             let cur_pos = indices.iter().position(|&i| i == self.active_row);
             match cur_pos {
                 Some(p) => {
-                    if amount == 1 && p == 0 {
-                        // Wrap to last visible task.
-                        self.active_row = *indices.last().unwrap();
-                        if let Some(col) = self.columns.get_mut(self.active_col) {
-                            col.scroll_offset = self.active_row;
-                        }
-                    } else {
-                        self.active_row = indices[p.saturating_sub(amount)];
-                    }
+                    self.active_row = indices[p.saturating_sub(amount)];
                 }
                 None => {
                     // Not on a visible task — snap to previous visible one.
@@ -2035,16 +2082,7 @@ impl App {
             }
             return;
         }
-        if amount == 1 && self.active_row == 0 {
-            // Wrap to bottom.
-            self.active_row = self.last_row_index();
-            // Set scroll offset to show the bottom of the list.
-            if let Some(col) = self.columns.get_mut(self.active_col) {
-                col.scroll_offset = self.active_row;
-            }
-        } else {
-            self.active_row = self.active_row.saturating_sub(amount);
-        }
+        self.active_row = self.active_row.saturating_sub(amount);
     }
 
     pub(crate) fn last_row_index(&self) -> usize {
@@ -2223,8 +2261,7 @@ impl App {
                     self.move_col_right();
                 }
             } else {
-                self.active_col = idx;
-                self.clamp_active_row();
+                self.switch_col(idx);
             }
             self.persist_collapsed();
         }
@@ -2273,8 +2310,7 @@ impl App {
             for (i, col) in self.columns.iter_mut().enumerate() {
                 col.collapsed = i != idx;
             }
-            self.active_col = idx;
-            self.clamp_active_row();
+            self.switch_col(idx);
             self.view = AppView::Board;
         }
     }
@@ -2789,12 +2825,58 @@ impl App {
                 self.set_status("No file path");
                 return;
             }
-            let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
             let file = task.file.clone();
-            // We can't easily suspend the TUI to open an editor in-process,
-            // so just set a status message with instructions.
-            self.set_status(format!("Run: {} {}", editor, file));
+
+            // Detect the current editor context and open the file appropriately.
+            // For GUI editors (VS Code, Cursor, Zed, etc.) we can spawn the editor
+            // without suspending the TUI since they open in a separate window/tab.
+            if let Some(cmd) = Self::detect_gui_editor() {
+                use std::process::{Command, Stdio};
+                let result = Command::new(&cmd)
+                    .arg(&file)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn();
+                match result {
+                    Ok(_) => self.set_status(format!("Opened in {cmd}")),
+                    Err(e) => self.set_status(format!("Failed to open in {cmd}: {e}")),
+                }
+            } else {
+                let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+                self.set_status(format!("Run: {} {}", editor, file));
+            }
         }
+    }
+
+    /// Detect a GUI editor from the current terminal environment.
+    /// Returns the CLI command to use, or `None` if no GUI editor is detected.
+    fn detect_gui_editor() -> Option<String> {
+        // Check TERM_PROGRAM first — set by the terminal emulator / integrated terminal.
+        if let Ok(term) = std::env::var("TERM_PROGRAM") {
+            match term.to_lowercase().as_str() {
+                "vscode" => return Some("code".to_string()),
+                "cursor" => return Some("cursor".to_string()),
+                _ => {}
+            }
+        }
+
+        // Check VISUAL — convention for GUI-capable editors.
+        if let Ok(visual) = std::env::var("VISUAL") {
+            let cmd = visual.split_whitespace().next().unwrap_or("");
+            // Only use VISUAL if it's a known GUI editor, not a terminal one.
+            let base = std::path::Path::new(cmd)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(cmd);
+            match base {
+                "code" | "cursor" | "zed" | "subl" | "atom" | "mate" | "idea" | "webstorm"
+                | "goland" | "rustrover" | "fleet" => return Some(visual),
+                _ => {}
+            }
+        }
+
+        None
     }
 
     pub fn fold_level(&self) -> usize {
@@ -2985,13 +3067,13 @@ impl App {
         }
     }
 
-    /// Returns true if semantic search is available (index exists on disk).
-    /// The `enabled` config flag gates automatic sync, not interactive `~` queries.
+    /// Returns true if semantic search is configured (provider is set).
+    /// The index is auto-synced on first query if it doesn't exist yet.
     pub(crate) fn sem_available(&self) -> bool {
-        self.cfg.dir().join(crate::embed::INDEX_FILE).exists()
+        !self.cfg.semantic_search.provider.is_empty()
     }
 
-    /// Resets all semantic search state.
+    /// Resets all semantic search state (board scores + detail find).
     pub(crate) fn clear_sem_state(&mut self) {
         self.search.sem_last_key = None;
         self.search.sem_pending = false;
@@ -2999,6 +3081,16 @@ impl App {
         self.search.sem_error = None;
         self.search.sem_search_rx = None;
         self.search.sem_scores.clear();
+        self.search.sem_find_rx = None;
+    }
+
+    /// Resets only the detail-find semantic state, preserving board-level
+    /// `sem_scores` and `sem_search_rx`.
+    pub(crate) fn clear_sem_find_state(&mut self) {
+        self.search.sem_last_key = None;
+        self.search.sem_pending = false;
+        self.search.sem_loading = false;
+        self.search.sem_error = None;
         self.search.sem_find_rx = None;
     }
 
@@ -3013,7 +3105,7 @@ impl App {
                 self.search.sem_last_key = Some(Instant::now());
                 self.search.sem_pending = true;
             } else {
-                self.search.sem_error = Some("semantic search not available (run `embed sync` first)".into());
+                self.search.sem_error = Some("semantic search not configured (set semantic_search.provider in config.toml)".into());
                 self.search.sem_scores.clear();
             }
         } else {
@@ -3025,6 +3117,7 @@ impl App {
     /// Called when the find query changes (detail `/` mode).
     /// If query contains `~`, arms debounce for semantic find.
     /// Otherwise, delegates to `recompute_find_matches()`.
+    /// Uses `clear_sem_find_state()` to preserve board-level `sem_scores`.
     pub(crate) fn on_find_query_changed(&mut self) {
         if Self::is_semantic_query(&self.detail.find_query) {
             if self.sem_available() {
@@ -3032,10 +3125,10 @@ impl App {
                 self.search.sem_last_key = Some(Instant::now());
                 self.search.sem_pending = true;
             } else {
-                self.search.sem_error = Some("semantic search not available (run `embed sync` first)".into());
+                self.search.sem_error = Some("semantic search not configured (set semantic_search.provider in config.toml)".into());
             }
         } else {
-            self.clear_sem_state();
+            self.clear_sem_find_state();
             self.recompute_find_matches();
         }
     }
@@ -3053,6 +3146,12 @@ impl App {
                     } else {
                         self.search.sem_scores = result.scores;
                         self.search.sem_error = None;
+                        // Navigate to the best (highest-scoring) match.
+                        if let Some((&best_id, _)) = self.search.sem_scores.iter()
+                            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                        {
+                            self.select_task_by_id(best_id);
+                        }
                     }
                     self.search.sem_loading = false;
                 }
@@ -3116,18 +3215,35 @@ impl App {
 
         std::thread::spawn(move || {
             let result = match crate::embed::Manager::new(&cfg) {
-                Ok(mgr) => match mgr.search(&query, 0) {
-                    Ok(results) => SemSearchResult {
-                        query,
-                        scores: results.iter().map(|r| (r.task_id, r.score)).collect(),
-                        error: None,
-                    },
-                    Err(e) => SemSearchResult {
-                        query,
-                        scores: HashMap::new(),
-                        error: Some(e.to_string()),
-                    },
-                },
+                Ok(mut mgr) => {
+                    // Auto-sync if the index is empty (first use or after clear).
+                    if mgr.doc_count() == 0 {
+                        let sync_err = match crate::model::task::read_all_lenient(&cfg.tasks_path()) {
+                            Ok((tasks, _)) => mgr.sync(&tasks).err().map(|e| format!("sync: {e}")),
+                            Err(e) => Some(format!("loading tasks: {e}")),
+                        };
+                        if let Some(err) = sync_err {
+                            let _ = tx.send(SemSearchResult {
+                                query,
+                                scores: HashMap::new(),
+                                error: Some(err),
+                            });
+                            return;
+                        }
+                    }
+                    match mgr.search(&query, 0) {
+                        Ok(results) => SemSearchResult {
+                            query,
+                            scores: results.iter().map(|r| (r.task_id, r.score)).collect(),
+                            error: None,
+                        },
+                        Err(e) => SemSearchResult {
+                            query,
+                            scores: HashMap::new(),
+                            error: Some(e.to_string()),
+                        },
+                    }
+                }
                 Err(e) => SemSearchResult {
                     query,
                     scores: HashMap::new(),
@@ -3176,49 +3292,69 @@ impl App {
 
         std::thread::spawn(move || {
             let result = match crate::embed::Manager::new(&cfg) {
-                // Use a large limit so the current task's chunks aren't excluded
-                // by higher-scoring chunks from other tasks.
-                Ok(mgr) => match mgr.find(&query, 500) {
-                    Ok(results) => {
-                        // Filter to chunks belonging to this task.
-                        let task_results: Vec<_> = results
-                            .iter()
-                            .filter(|r| r.task_id == task_id)
-                            .collect();
-
-                        // Map each matching chunk to rendered detail-view line
-                        // indices. A chunk's `r.line` is the raw body line where
-                        // its heading starts. Find the closest body_line_text
-                        // that contains the heading to get the rendered index.
-                        let mut line_indices: Vec<usize> = Vec::new();
-                        for r in &task_results {
-                            if !r.header.is_empty() {
-                                // Find rendered line matching this section header.
-                                if let Some(idx) = body_line_texts.iter().position(|t| {
-                                    t.trim() == r.header.trim()
-                                        || t.trim().starts_with(r.header.trim())
-                                }) {
-                                    line_indices.push(meta_count + idx);
-                                }
-                            } else {
-                                // Preamble or headerless chunk — match at body start.
-                                line_indices.push(meta_count);
-                            }
-                        }
-                        line_indices.dedup();
-
-                        SemFindResult {
-                            query,
-                            line_indices,
-                            error: None,
+                Ok(mut mgr) => {
+                    // Auto-sync if the index is empty (first use or after clear).
+                    if mgr.doc_count() == 0 {
+                        let sync_err = match crate::model::task::read_all_lenient(&cfg.tasks_path()) {
+                            Ok((tasks, _)) => mgr.sync(&tasks).err().map(|e| format!("sync: {e}")),
+                            Err(e) => Some(format!("loading tasks: {e}")),
+                        };
+                        if let Some(err) = sync_err {
+                            let _ = tx.send(SemFindResult {
+                                query,
+                                line_indices: Vec::new(),
+                                error: Some(err),
+                            });
+                            return;
                         }
                     }
-                    Err(e) => SemFindResult {
-                        query,
-                        line_indices: Vec::new(),
-                        error: Some(e.to_string()),
-                    },
-                },
+                    // Use a large limit so the current task's chunks aren't excluded
+                    // by higher-scoring chunks from other tasks.
+                    match mgr.find(&query, 500) {
+                        Ok(results) => {
+                            // Filter to chunks belonging to this task.
+                            let task_results: Vec<_> = results
+                                .iter()
+                                .filter(|r| r.task_id == task_id)
+                                .collect();
+
+                            // Map each matching chunk to rendered detail-view line
+                            // indices. A chunk's `r.line` is the raw body line where
+                            // its heading starts. Find the closest body_line_text
+                            // that contains the heading to get the rendered index.
+                            let mut line_indices: Vec<usize> = Vec::new();
+                            for r in &task_results {
+                                if !r.header.is_empty() {
+                                    // Find rendered line matching this section header.
+                                    if let Some(idx) =
+                                        body_line_texts.iter().position(|t| {
+                                            t.trim() == r.header.trim()
+                                                || t.trim()
+                                                    .starts_with(r.header.trim())
+                                        })
+                                    {
+                                        line_indices.push(meta_count + idx);
+                                    }
+                                } else {
+                                    // Preamble or headerless chunk — match at body start.
+                                    line_indices.push(meta_count);
+                                }
+                            }
+                            line_indices.dedup();
+
+                            SemFindResult {
+                                query,
+                                line_indices,
+                                error: None,
+                            }
+                        }
+                        Err(e) => SemFindResult {
+                            query,
+                            line_indices: Vec::new(),
+                            error: Some(e.to_string()),
+                        },
+                    }
+                }
                 Err(e) => SemFindResult {
                     query,
                     line_indices: Vec::new(),
@@ -3245,7 +3381,7 @@ mod tests {
         let mut cfg = Config::new_default("test-board");
         // Point dir at a temp path so InputHistory::with_path doesn't
         // interfere with the real board.
-        cfg.set_dir(std::env::temp_dir().join("kanban-md-tui-test"));
+        cfg.set_dir(std::env::temp_dir().join("kbmdx-tui-test"));
         cfg
     }
 
@@ -3558,7 +3694,7 @@ mod tests {
 
     #[test]
     fn input_history_push_deduplicates() {
-        let dir = std::env::temp_dir().join("kanban-md-test-history");
+        let dir = std::env::temp_dir().join("kbmdx-test-history");
         let _ = std::fs::create_dir_all(&dir);
         let mut h = InputHistory::with_path(dir.join("test_hist"));
         h.push("first");
@@ -3569,7 +3705,7 @@ mod tests {
 
     #[test]
     fn input_history_up_down_navigation() {
-        let dir = std::env::temp_dir().join("kanban-md-test-history");
+        let dir = std::env::temp_dir().join("kbmdx-test-history");
         let _ = std::fs::create_dir_all(&dir);
         let mut h = InputHistory::with_path(dir.join("test_hist2"));
         h.push("alpha");
@@ -3608,7 +3744,7 @@ mod tests {
 
     #[test]
     fn input_history_reset() {
-        let dir = std::env::temp_dir().join("kanban-md-test-history");
+        let dir = std::env::temp_dir().join("kbmdx-test-history");
         let _ = std::fs::create_dir_all(&dir);
         let mut h = InputHistory::with_path(dir.join("test_hist3"));
         h.push("a");
@@ -3621,7 +3757,7 @@ mod tests {
 
     #[test]
     fn input_history_empty_entries_ignored() {
-        let dir = std::env::temp_dir().join("kanban-md-test-history");
+        let dir = std::env::temp_dir().join("kbmdx-test-history");
         let _ = std::fs::create_dir_all(&dir);
         let mut h = InputHistory::with_path(dir.join("test_hist4"));
         h.push("");
@@ -3631,7 +3767,7 @@ mod tests {
 
     #[test]
     fn input_history_completions() {
-        let dir = std::env::temp_dir().join("kanban-md-test-history");
+        let dir = std::env::temp_dir().join("kbmdx-test-history");
         let _ = std::fs::create_dir_all(&dir);
         let mut h = InputHistory::with_path(dir.join("test_hist5"));
         h.push("priority:high");

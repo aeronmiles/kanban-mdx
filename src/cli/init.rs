@@ -1,4 +1,4 @@
-//! `kanban-md init` — initialize a new kanban board.
+//! `kbmdx init` — initialize a new kanban board.
 
 use std::io::Write;
 

@@ -52,7 +52,7 @@ pub fn load(dir: &Path) -> Result<Config, CliError> {
     } else {
         return Err(CliError::new(
             ErrorCode::BoardNotFound,
-            "no kanban board found (run 'kanban-md init' to create one)",
+            "no kanban board found (run 'kbmdx init' to create one)",
         ));
     };
 
@@ -151,7 +151,7 @@ pub fn init(dir: &Path, name: &str) -> Result<Config, CliError> {
 
 /// Find the kanban directory by walking up from start_dir.
 ///
-/// Walk upward looking for `kanban/config.toml` (or legacy `config.yml`).
+/// Walk upward looking for `.kbmdx/config.toml` (or legacy `config.yml`).
 /// If not found and in a git worktree, resolve main worktree and try there.
 pub fn find_dir(start_dir: &Path) -> Result<PathBuf, CliError> {
     let abs_start = if start_dir.is_absolute() {
@@ -182,7 +182,7 @@ pub fn find_dir(start_dir: &Path) -> Result<PathBuf, CliError> {
 
     Err(CliError::new(
         ErrorCode::BoardNotFound,
-        "no kanban board found (run 'kanban-md init' to create one)",
+        "no kanban board found (run 'kbmdx init' to create one)",
     ))
 }
 
@@ -192,7 +192,7 @@ pub fn find_dir(start_dir: &Path) -> Result<PathBuf, CliError> {
 fn find_dir_from(start_dir: &Path) -> Option<PathBuf> {
     let mut dir = start_dir.to_path_buf();
     loop {
-        // Check dir/kanban/config.toml, then legacy config.yml
+        // Check dir/.kbmdx/config.toml, then legacy config.yml
         let kanban_dir = dir.join(DEFAULT_DIR);
         if kanban_dir.join(CONFIG_FILE_NAME).exists()
             || kanban_dir.join(LEGACY_CONFIG_FILE_NAME).exists()
@@ -273,7 +273,7 @@ fn migrate(config: &mut Config) -> Result<(), CliError> {
         return Err(CliError::newf(
             ErrorCode::InvalidInput,
             format!(
-                "config version {} is newer than supported version {} (upgrade kanban-md)",
+                "config version {} is newer than supported version {} (upgrade kbmdx)",
                 config.version, CURRENT_VERSION
             ),
         ));
@@ -555,7 +555,7 @@ mod tests {
     #[test]
     fn test_init_creates_directory_structure() {
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
 
         let cfg = init(&kanban_dir, "Test Board").unwrap();
 
@@ -569,7 +569,7 @@ mod tests {
     #[test]
     fn test_init_and_load_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
 
         let original = init(&kanban_dir, "My Board").unwrap();
 
@@ -584,7 +584,7 @@ mod tests {
     #[test]
     fn test_save_and_load() {
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
 
         let mut cfg = init(&kanban_dir, "Save Test").unwrap();
         cfg.next_id = 42;
@@ -598,7 +598,7 @@ mod tests {
     fn test_find_dir_kanban_subdir() {
         let tmp = tempfile::tempdir().unwrap();
         let project_dir = tmp.path().join("project");
-        let kanban_dir = project_dir.join("kanban");
+        let kanban_dir = project_dir.join(".kbmdx");
         fs::create_dir_all(&kanban_dir).unwrap();
         fs::write(kanban_dir.join(CONFIG_FILE_NAME), "version = 14\n").unwrap();
 
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn test_find_dir_walks_up() {
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
         fs::create_dir_all(&kanban_dir).unwrap();
         fs::write(kanban_dir.join(CONFIG_FILE_NAME), "version = 14\n").unwrap();
 
@@ -822,7 +822,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
 
         init(&kanban_dir, "Perms Test").unwrap();
 
@@ -834,7 +834,7 @@ mod tests {
     #[test]
     fn test_find_dir_from_inside_kanban_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
         let tasks_dir = kanban_dir.join("tasks");
         fs::create_dir_all(&tasks_dir).unwrap();
         fs::write(kanban_dir.join(CONFIG_FILE_NAME), "version = 14\n").unwrap();
@@ -870,7 +870,7 @@ mod tests {
     #[test]
     fn test_auto_migrate_yaml_to_toml() {
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
         let tasks_dir = kanban_dir.join("tasks");
         fs::create_dir_all(&tasks_dir).unwrap();
 
@@ -901,7 +901,7 @@ mod tests {
     #[test]
     fn test_find_dir_legacy_yaml() {
         let tmp = tempfile::tempdir().unwrap();
-        let kanban_dir = tmp.path().join("kanban");
+        let kanban_dir = tmp.path().join(".kbmdx");
         fs::create_dir_all(&kanban_dir).unwrap();
         // Write a legacy config.yml — find_dir should still locate it.
         fs::write(kanban_dir.join(LEGACY_CONFIG_FILE_NAME), "version = 15\n").unwrap();

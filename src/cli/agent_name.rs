@@ -1,4 +1,4 @@
-//! `kanban-md agent-name` — generate a random agent name.
+//! `kbmdx agent-name` — generate a random agent name.
 
 use std::io::Write;
 

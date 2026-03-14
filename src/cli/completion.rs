@@ -1,4 +1,4 @@
-//! `kanban-md completion` — generate shell completions.
+//! `kbmdx completion` — generate shell completions.
 
 use std::io;
 
@@ -17,6 +17,6 @@ pub struct CompletionArgs {
 
 pub fn run(_cli: &Cli, args: CompletionArgs) -> Result<(), CliError> {
     let mut cmd = super::root::Cli::command();
-    generate(args.shell, &mut cmd, "kanban-md", &mut io::stdout());
+    generate(args.shell, &mut cmd, "kbmdx", &mut io::stdout());
     Ok(())
 }

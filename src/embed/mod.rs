@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use sembed_rs::{self, Document, Index};
+use sembed_rs::{self, Document, Index, SqliteStore};
 
 use crate::model::config::{Config, SemanticSearchConfig};
 use crate::model::task::Task;
@@ -23,7 +23,10 @@ use crate::model::task::Task;
 use chunk::{chunk_task, parse_chunk_id, task_content, Chunk};
 
 /// Default name for the embeddings index file.
-pub const INDEX_FILE: &str = ".embeddings.json";
+pub const INDEX_FILE: &str = ".embeddings.db";
+
+/// Legacy JSON index file name (removed on startup if present).
+const LEGACY_INDEX_FILE: &str = ".embeddings.json";
 
 /// Environment variable name for the embedding provider API key.
 pub const API_KEY_ENV: &str = "KANBAN_EMBED_API_KEY";
@@ -76,6 +79,9 @@ pub enum ManagerError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("store error: {0}")]
+    Store(#[from] sembed_rs::StoreError),
+
     #[error("{0}")]
     Config(String),
 }
@@ -83,7 +89,7 @@ pub enum ManagerError {
 impl Manager {
     /// Test-only constructor that accepts pre-built embedders.
     ///
-    /// Bypasses config parsing and API key requirements.
+    /// Uses an in-memory index with no persistence.
     #[cfg(test)]
     pub fn with_embedders(
         doc_embedder: Box<dyn sembed_rs::Embedder>,
@@ -100,21 +106,24 @@ impl Manager {
 
     /// Creates a Manager from kanban config.
     ///
-    /// Returns an error if the config is enabled but misconfigured or missing
-    /// an API key.
+    /// Opens (or creates) a SQLite-backed embedding index. If a legacy
+    /// `.embeddings.json` exists, it is deleted (embeddings will be
+    /// recomputed on next sync).
     pub fn new(cfg: &Config) -> Result<Self, ManagerError> {
         let (doc_embedder, query_embedder) =
             create_embedders(&cfg.semantic_search).map_err(ManagerError::Embed)?;
 
         let index_path = cfg.dir().join(INDEX_FILE);
 
-        // Load existing index if present.
-        let index = Index::new();
-        if index_path.exists() {
-            if let Ok(f) = fs::File::open(&index_path) {
-                let _ = index.load(f);
-            }
+        // Remove legacy JSON index if present.
+        let legacy_path = cfg.dir().join(LEGACY_INDEX_FILE);
+        if legacy_path.exists() {
+            let _ = fs::remove_file(&legacy_path);
         }
+
+        // Open SQLite store and create index.
+        let store = SqliteStore::open(&index_path)?;
+        let index = Index::with_store(Box::new(store))?;
 
         Ok(Self {
             index,
@@ -243,8 +252,6 @@ impl Manager {
             self.index.remove(&remove_ids);
         }
 
-        self.save()?;
-
         Ok(SyncStats {
             total_tasks: tasks.len(),
             total_chunks: self.index.len(),
@@ -352,21 +359,16 @@ impl Manager {
 
     /// Removes all documents from the index and deletes the index file.
     pub fn clear(&mut self) -> Result<(), ManagerError> {
+        // Drop the old index (closes SQLite connection) and create a fresh in-memory one.
         self.index = Index::new();
         if self.index_path.exists() {
             fs::remove_file(&self.index_path)?;
         }
-        Ok(())
-    }
-
-    /// Saves the index to disk.
-    fn save(&self) -> Result<(), ManagerError> {
-        let f = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&self.index_path)?;
-        self.index.save(f)?;
+        // Also remove WAL/SHM sidecar files if present.
+        let wal = self.index_path.with_extension("db-wal");
+        let shm = self.index_path.with_extension("db-shm");
+        let _ = fs::remove_file(wal);
+        let _ = fs::remove_file(shm);
         Ok(())
     }
 }
@@ -394,6 +396,7 @@ pub struct EmbedStatus {
     pub enabled: bool,
     pub provider: String,
     pub model: String,
+    pub dimensions: i32,
     pub index_file: String,
     pub documents: usize,
     pub file_size_bytes: u64,
@@ -406,10 +409,17 @@ pub fn get_status(cfg: &Config) -> EmbedStatus {
     let ss = &cfg.semantic_search;
     let index_path = cfg.dir().join(INDEX_FILE);
 
+    let effective_dims = if ss.dimensions > 0 {
+        ss.dimensions
+    } else {
+        sembed_rs::model_default_dimensions(&ss.model).unwrap_or(0)
+    };
+
     let mut status = EmbedStatus {
         enabled: ss.enabled,
         provider: ss.provider.clone(),
         model: ss.model.clone(),
+        dimensions: effective_dims,
         index_file: String::new(),
         documents: 0,
         file_size_bytes: 0,
@@ -426,12 +436,11 @@ pub fn get_status(cfg: &Config) -> EmbedStatus {
         }
     }
 
-    // Try to load and count documents.
+    // Try to load and count documents via SQLite store.
     if ss.enabled && !status.index_file.is_empty() {
-        if let Ok(f) = fs::File::open(&index_path) {
-            let idx = Index::new();
-            if idx.load(f).is_ok() {
-                status.documents = idx.len();
+        if let Ok(store) = SqliteStore::open(&index_path) {
+            if let Ok(count) = sembed_rs::Store::count(&store) {
+                status.documents = count;
             }
         }
     }
@@ -473,11 +482,12 @@ fn create_embedders(
             } else {
                 cfg.base_url.clone()
             };
+            // Voyage API does not support the `dimensions` parameter.
             let doc = Box::new(sembed_rs::OpenAICompatible::new(sembed_rs::OpenAIConfig {
                 base_url: base_url.clone(),
                 api_key: api_key.clone(),
                 model: cfg.model.clone(),
-                dimensions,
+                dimensions: None,
                 input_type: Some("document".to_string()),
                 timeout_secs: None,
             })?);
@@ -485,7 +495,7 @@ fn create_embedders(
                 base_url,
                 api_key,
                 model: cfg.model.clone(),
-                dimensions,
+                dimensions: None,
                 input_type: Some("query".to_string()),
                 timeout_secs: None,
             })?);
@@ -716,28 +726,6 @@ mod tests {
     }
 
     #[test]
-    fn test_index_save_and_load() {
-        let idx = Index::new();
-        idx.add(vec![Document {
-            id: "1:0".to_string(),
-            content: "hello".to_string(),
-            content_hash: "abc".to_string(),
-            vector: vec![1.0, 2.0, 3.0],
-            metadata: HashMap::new(),
-        }]);
-
-        let mut buf = Vec::new();
-        idx.save(&mut buf).unwrap();
-
-        let loaded = Index::new();
-        loaded.load(buf.as_slice()).unwrap();
-        assert_eq!(loaded.len(), 1);
-        let doc = loaded.get("1:0").unwrap();
-        assert_eq!(doc.content, "hello");
-        assert_eq!(doc.vector, vec![1.0, 2.0, 3.0]);
-    }
-
-    #[test]
     fn test_create_embedders_unsupported() {
         let cfg = SemanticSearchConfig {
             enabled: true,
@@ -816,7 +804,7 @@ mod tests {
         let mgr = Manager::with_embedders(
             Box::new(doc_mock),
             Box::new(query_mock),
-            dir.join(".embeddings.json"),
+            dir.join(INDEX_FILE),
         );
         (mgr, doc_calls)
     }
@@ -1017,70 +1005,10 @@ mod tests {
 
         mgr.sync(&tasks).unwrap();
         assert!(mgr.doc_count() > 0);
-        assert!(mgr.index_path().exists(), "index file should exist after sync");
 
         mgr.clear().unwrap();
 
         assert_eq!(mgr.doc_count(), 0, "doc_count should be 0 after clear");
-        assert!(
-            !mgr.index_path().exists(),
-            "index file should be deleted after clear"
-        );
-    }
-
-    #[test]
-    fn test_save_load_roundtrip() {
-        let dir = tempfile::tempdir().unwrap();
-        let index_path = dir.path().join(".embeddings.json");
-
-        // Create first manager and sync tasks.
-        let doc_mock1 = sembed_rs::MockEmbedder::new(8);
-        let query_mock1 = sembed_rs::MockEmbedder::new(8);
-        let mut mgr1 = Manager::with_embedders(
-            Box::new(doc_mock1),
-            Box::new(query_mock1),
-            index_path.clone(),
-        );
-
-        let tasks = vec![
-            make_test_task(1, "Task one", "Body one"),
-            make_test_task(2, "Task two", "Body two"),
-            make_test_task(3, "Task three", "Body three"),
-        ];
-
-        mgr1.sync(&tasks).unwrap();
-        let original_count = mgr1.doc_count();
-        assert!(original_count > 0);
-        assert!(index_path.exists(), "index file should exist after sync");
-
-        // Create second manager pointing at the same index file.
-        let doc_mock2 = sembed_rs::MockEmbedder::new(8);
-        let query_mock2 = sembed_rs::MockEmbedder::new(8);
-        let mgr2 = Manager::with_embedders(
-            Box::new(doc_mock2),
-            Box::new(query_mock2),
-            index_path.clone(),
-        );
-
-        // The new manager starts empty since with_embedders doesn't load.
-        assert_eq!(mgr2.doc_count(), 0);
-
-        // Load the index by reading the persisted file directly into the index.
-        let f = fs::File::open(&index_path).unwrap();
-        mgr2.index.load(f).unwrap();
-
-        assert_eq!(
-            mgr2.doc_count(),
-            original_count,
-            "loaded manager should have same doc count as original"
-        );
-
-        // Verify the loaded manager can search successfully.
-        let results = mgr2.search("Task one", 5).unwrap();
-        assert!(
-            !results.is_empty(),
-            "loaded manager should return search results"
-        );
     }
 
     // -----------------------------------------------------------------------
@@ -1125,19 +1053,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let index_path = dir.path().join(INDEX_FILE);
 
-        // Create and save an index with 3 documents.
-        let idx = Index::new();
-        for i in 0..3 {
-            idx.add(vec![Document {
+        // Create and populate a SQLite index.
+        let store = SqliteStore::open(&index_path).unwrap();
+        let docs: Vec<Document> = (0..3)
+            .map(|i| Document {
                 id: format!("{}:0", i + 1),
                 content: format!("task {}", i + 1),
                 content_hash: format!("hash_{}", i + 1),
                 vector: vec![i as f32, 1.0],
                 metadata: HashMap::new(),
-            }]);
-        }
-        let f = fs::File::create(&index_path).unwrap();
-        idx.save(f).unwrap();
+            })
+            .collect();
+        sembed_rs::Store::upsert(&store, &docs).unwrap();
+        drop(store);
 
         let mut cfg = Config::new_default("test");
         cfg.set_dir(dir.path().to_path_buf());
@@ -1151,7 +1079,6 @@ mod tests {
         assert!(!status.index_file.is_empty());
         assert!(status.file_size_bytes > 0);
         assert!(!status.last_sync.is_empty());
-        // last_sync should be a valid RFC 3339 timestamp
         assert!(
             chrono::DateTime::parse_from_rfc3339(&status.last_sync).is_ok(),
             "last_sync should be valid RFC 3339: {}",
@@ -1161,25 +1088,25 @@ mod tests {
 
     #[test]
     fn test_get_status_disabled_with_existing_index() {
-        // When disabled, get_status should still report file metadata
-        // but NOT count documents (skips index loading).
         let dir = tempfile::tempdir().unwrap();
         let index_path = dir.path().join(INDEX_FILE);
 
-        let idx = Index::new();
-        idx.add(vec![Document {
-            id: "1:0".to_string(),
-            content: "task".to_string(),
-            content_hash: "h".to_string(),
-            vector: vec![1.0],
-            metadata: HashMap::new(),
-        }]);
-        let f = fs::File::create(&index_path).unwrap();
-        idx.save(f).unwrap();
+        let store = SqliteStore::open(&index_path).unwrap();
+        sembed_rs::Store::upsert(
+            &store,
+            &[Document {
+                id: "1:0".to_string(),
+                content: "task".to_string(),
+                content_hash: "h".to_string(),
+                vector: vec![1.0],
+                metadata: HashMap::new(),
+            }],
+        )
+        .unwrap();
+        drop(store);
 
         let mut cfg = Config::new_default("test");
         cfg.set_dir(dir.path().to_path_buf());
-        // Not enabling semantic_search
 
         let status = get_status(&cfg);
         assert!(!status.enabled);
@@ -1189,35 +1116,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_status_corrupted_index_file() {
-        // If the index file is corrupted, get_status should gracefully
-        // report 0 documents instead of panicking.
-        let dir = tempfile::tempdir().unwrap();
-        let index_path = dir.path().join(INDEX_FILE);
-
-        // Write garbage to the index file.
-        fs::write(&index_path, b"this is not valid json").unwrap();
-
-        let mut cfg = Config::new_default("test");
-        cfg.set_dir(dir.path().to_path_buf());
-        cfg.semantic_search.enabled = true;
-        cfg.semantic_search.provider = "voyage".to_string();
-        cfg.semantic_search.model = "test".to_string();
-
-        let status = get_status(&cfg);
-        assert!(status.enabled);
-        assert_eq!(status.documents, 0, "corrupted index should yield 0 documents");
-        assert!(!status.index_file.is_empty());
-        assert!(status.file_size_bytes > 0);
-    }
-
-    #[test]
     fn test_embed_status_serializes_to_json() {
         let status = EmbedStatus {
             enabled: true,
             provider: "voyage".to_string(),
             model: "voyage-3".to_string(),
-            index_file: "/path/to/.embeddings.json".to_string(),
+            dimensions: 1024,
+            index_file: "/path/to/.embeddings.db".to_string(),
             documents: 42,
             file_size_bytes: 8192,
             last_sync: "2026-03-01T12:00:00Z".to_string(),
@@ -1230,6 +1135,6 @@ mod tests {
         assert_eq!(json["documents"], 42);
         assert_eq!(json["file_size_bytes"], 8192);
         assert_eq!(json["last_sync"], "2026-03-01T12:00:00Z");
-        assert_eq!(json["index_file"], "/path/to/.embeddings.json");
+        assert_eq!(json["index_file"], "/path/to/.embeddings.db");
     }
 }

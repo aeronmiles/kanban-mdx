@@ -1,4 +1,4 @@
-//! `kanban-md list` — list tasks with optional filters.
+//! `kbmdx list` — list tasks with optional filters.
 
 use crate::cli::root::Cli;
 use crate::error::{CliError, ErrorCode};

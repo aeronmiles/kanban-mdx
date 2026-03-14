@@ -1,4 +1,4 @@
-//! `kanban-md handoff` — hand off a task to another agent.
+//! `kbmdx handoff` — hand off a task to another agent.
 
 use std::io::Write;
 use chrono::Utc;

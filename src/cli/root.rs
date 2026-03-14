@@ -10,7 +10,7 @@ use crate::output::Format;
 
 /// A file-based Kanban tool powered by Markdown.
 #[derive(Parser)]
-#[command(name = "kanban-md", version, about, long_about = None)]
+#[command(name = "kbmdx", version, about, long_about = None)]
 pub struct Cli {
     /// Path to the kanban directory (overrides auto-detection).
     #[arg(long, short = 'd', global = true, env = "KANBAN_DIR")]

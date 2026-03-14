@@ -1,4 +1,4 @@
-//! `kanban-md context` — generate board context markdown for agents.
+//! `kbmdx context` — generate board context markdown for agents.
 
 use std::fmt::Write as FmtWrite;
 use std::io::Write;

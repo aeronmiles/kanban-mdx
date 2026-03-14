@@ -1,4 +1,4 @@
-//! `kanban-md delete` — delete one or more tasks.
+//! `kbmdx delete` — delete one or more tasks.
 
 use std::io::Write;
 

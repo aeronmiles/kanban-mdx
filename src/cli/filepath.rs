@@ -1,4 +1,4 @@
-//! `kanban-md filepath` — print the file path for a task.
+//! `kbmdx filepath` — print the file path for a task.
 
 use std::io::Write;
 

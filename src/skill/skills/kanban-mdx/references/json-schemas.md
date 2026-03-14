@@ -1,4 +1,4 @@
-# kanban-md JSON Output Schemas
+# kanban-mdx JSON Output Schemas
 
 Reference for parsing `show --json` output and error responses.
 
@@ -25,7 +25,7 @@ Returned by: `show --json` (also by other commands when `--json` is passed).
   "blocked": true,
   "block_reason": "Waiting on API keys",
   "body": "Markdown body text",
-  "file": "kanban/tasks/001-task-title.md"
+  "file": ".kbmdx/tasks/001-task-title.md"
 }
 ```
 

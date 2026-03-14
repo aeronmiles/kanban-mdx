@@ -1,4 +1,4 @@
-//! `kanban-md find` — semantic search for tasks.
+//! `kbmdx find` — semantic search for tasks.
 //!
 //! Uses the embedding-based semantic search index to find relevant task
 //! sections by meaning rather than exact substring match. Requires semantic
@@ -34,7 +34,7 @@ pub fn run(cli: &Cli, args: FindArgs) -> Result<(), CliError> {
         return Err(CliError::new(
             ErrorCode::InvalidInput,
             "semantic search not configured; add semantic_search section to config.toml \
-             and run 'kanban-md embed sync'",
+             and run 'kbmdx embed sync'",
         ));
     }
 

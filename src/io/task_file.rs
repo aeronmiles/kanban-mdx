@@ -439,7 +439,7 @@ claimed_by: agent-fox
 claimed_at: 2024-06-15T10:00:00Z
 class: expedite
 branch: task/42-full-task
-worktree: ../kanban-md-task-42
+worktree: ../kbmdx-task-42
 ---
 
 This is the full body.
@@ -462,7 +462,7 @@ This is the full body.
         assert!(task.claimed_at.is_some());
         assert_eq!(task.class, "expedite");
         assert_eq!(task.branch, "task/42-full-task");
-        assert_eq!(task.worktree, "../kanban-md-task-42");
+        assert_eq!(task.worktree, "../kbmdx-task-42");
         assert_eq!(task.body, "This is the full body.");
     }
 }

@@ -283,8 +283,7 @@ impl App {
                     for (i, col) in self.columns.iter_mut().enumerate() {
                         col.collapsed = i != target;
                     }
-                    self.active_col = target;
-                    self.clamp_active_row();
+                    self.switch_col(target);
                     self.persist_collapsed();
                 }
             }

@@ -1,4 +1,4 @@
-//! `kanban-md undo` / `kanban-md redo` — undo/redo last mutation.
+//! `kbmdx undo` / `kbmdx redo` — undo/redo last mutation.
 
 use std::io::Write;
 

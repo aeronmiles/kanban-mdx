@@ -1,4 +1,4 @@
-//! `kanban-md edit` — edit one or more existing tasks.
+//! `kbmdx edit` — edit one or more existing tasks.
 
 use std::io::Write;
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};

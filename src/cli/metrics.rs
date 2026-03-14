@@ -1,4 +1,4 @@
-//! `kanban-md metrics` — show board metrics.
+//! `kbmdx metrics` — show board metrics.
 
 use crate::cli::root::Cli;
 use crate::error::{CliError, ErrorCode};

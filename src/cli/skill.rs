@@ -1,4 +1,4 @@
-//! `kanban-md skill` — manage agent skills.
+//! `kbmdx skill` — manage agent skills.
 //!
 //! Subcommands: check, install, show, update.
 
@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::error::{CliError, ErrorCode};
 use crate::skill;
 
-/// Top-level args for `kanban-md skill`.
+/// Top-level args for `kbmdx skill`.
 #[derive(clap::Args, Clone)]
 pub struct SkillArgs {
     #[command(subcommand)]
@@ -43,7 +43,7 @@ pub struct SkillInstallArgs {
     /// Agent(s) to install for (claude, codex, cursor, openclaw).
     #[arg(long, value_delimiter = ',')]
     pub agent: Option<Vec<String>>,
-    /// Skill(s) to install (kanban-md, kanban-based-development).
+    /// Skill(s) to install (kanban-mdx, kanban-based-development).
     #[arg(long, value_delimiter = ',')]
     pub skill: Option<Vec<String>>,
     /// Install to user-level (global) skill directory.
@@ -59,7 +59,7 @@ pub struct SkillInstallArgs {
 
 #[derive(clap::Args, Clone)]
 pub struct SkillShowArgs {
-    /// Skill to show (kanban-md or kanban-based-development).
+    /// Skill to show (kanban-mdx or kanban-based-development).
     #[arg(long)]
     pub skill: Option<String>,
 }
@@ -352,12 +352,12 @@ fn run_check(args: SkillCheckArgs) -> Result<(), CliError> {
     }
 
     if !any_found {
-        println!("No kanban-md skills installed. Run: kanban-md skill install");
+        println!("No kanban-mdx skills installed. Run: kbmdx skill install");
         return Ok(());
     }
 
     if any_outdated {
-        println!("Run: kanban-md skill update");
+        println!("Run: kbmdx skill update");
         return Err(CliError::new(
             ErrorCode::InternalError,
             "outdated skills found",

@@ -1,4 +1,4 @@
-//! `kanban-md gitignore` — manage .gitignore entries for the kanban directory.
+//! `kbmdx gitignore` — manage .gitignore entries for the kanban directory.
 //!
 //! Ensures the kanban directory is listed in the parent `.gitignore` file.
 //! Can be used interactively (prompts for confirmation) or non-interactively
@@ -245,31 +245,31 @@ mod tests {
 
     #[test]
     fn test_sanitize_gitignore_entry() {
-        assert_eq!(sanitize_gitignore_entry("kanban/"), "kanban/");
-        assert_eq!(sanitize_gitignore_entry("kanban"), "kanban/");
-        assert_eq!(sanitize_gitignore_entry("  kanban/  "), "kanban/");
-        assert_eq!(sanitize_gitignore_entry("kanban//"), "kanban/");
+        assert_eq!(sanitize_gitignore_entry(".kbmdx/"), ".kbmdx/");
+        assert_eq!(sanitize_gitignore_entry(".kbmdx"), ".kbmdx/");
+        assert_eq!(sanitize_gitignore_entry("  .kbmdx/  "), ".kbmdx/");
+        assert_eq!(sanitize_gitignore_entry(".kbmdx//"), ".kbmdx/");
     }
 
     #[test]
     fn test_has_gitignore_entry() {
-        let contents = b"node_modules/\nkanban/\n.env\n";
-        assert!(has_gitignore_entry(contents, "kanban/"));
+        let contents = b"node_modules/\n.kbmdx/\n.env\n";
+        assert!(has_gitignore_entry(contents, ".kbmdx/"));
         assert!(!has_gitignore_entry(contents, "build/"));
     }
 
     #[test]
     fn test_has_gitignore_entry_empty() {
-        assert!(!has_gitignore_entry(b"", "kanban/"));
+        assert!(!has_gitignore_entry(b"", ".kbmdx/"));
     }
 
     #[test]
     fn test_ensure_gitignore_entry_creates_file() {
         let dir = tempfile::tempdir().unwrap();
         let gitignore = dir.path().join(".gitignore");
-        ensure_gitignore_entry(&gitignore, "kanban/").unwrap();
+        ensure_gitignore_entry(&gitignore, ".kbmdx/").unwrap();
         let contents = std::fs::read_to_string(&gitignore).unwrap();
-        assert!(contents.contains("kanban/"));
+        assert!(contents.contains(".kbmdx/"));
     }
 
     #[test]
@@ -277,31 +277,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let gitignore = dir.path().join(".gitignore");
         std::fs::write(&gitignore, "node_modules/\n").unwrap();
-        ensure_gitignore_entry(&gitignore, "kanban/").unwrap();
+        ensure_gitignore_entry(&gitignore, ".kbmdx/").unwrap();
         let contents = std::fs::read_to_string(&gitignore).unwrap();
         assert!(contents.contains("node_modules/"));
-        assert!(contents.contains("kanban/"));
+        assert!(contents.contains(".kbmdx/"));
     }
 
     #[test]
     fn test_ensure_gitignore_entry_idempotent() {
         let dir = tempfile::tempdir().unwrap();
         let gitignore = dir.path().join(".gitignore");
-        std::fs::write(&gitignore, "kanban/\n").unwrap();
-        ensure_gitignore_entry(&gitignore, "kanban/").unwrap();
+        std::fs::write(&gitignore, ".kbmdx/\n").unwrap();
+        ensure_gitignore_entry(&gitignore, ".kbmdx/").unwrap();
         let contents = std::fs::read_to_string(&gitignore).unwrap();
         // Should still have exactly one entry.
-        assert_eq!(contents.matches("kanban/").count(), 1);
+        assert_eq!(contents.matches(".kbmdx/").count(), 1);
     }
 
     #[test]
     fn test_remove_gitignore_entry() {
         let dir = tempfile::tempdir().unwrap();
         let gitignore = dir.path().join(".gitignore");
-        std::fs::write(&gitignore, "node_modules/\nkanban/\n.env\n").unwrap();
-        remove_gitignore_entry(&gitignore, "kanban/").unwrap();
+        std::fs::write(&gitignore, "node_modules/\n.kbmdx/\n.env\n").unwrap();
+        remove_gitignore_entry(&gitignore, ".kbmdx/").unwrap();
         let contents = std::fs::read_to_string(&gitignore).unwrap();
-        assert!(!contents.contains("kanban/"));
+        assert!(!contents.contains(".kbmdx/"));
         assert!(contents.contains("node_modules/"));
         assert!(contents.contains(".env"));
     }

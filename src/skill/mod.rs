@@ -1,7 +1,7 @@
 //! Skill registry, agent discovery, installation, and version management.
 //!
 //! Skills are embedded markdown files that provide AI coding agents with
-//! instructions for using kanban-md. This module handles discovering built-in
+//! instructions for using kanban-mdx. This module handles discovering built-in
 //! skills, installing them to agent-specific directories, and checking for
 //! version staleness.
 
@@ -13,11 +13,11 @@ use std::path::{Path, PathBuf};
 // Embedded skill content
 // ---------------------------------------------------------------------------
 
-/// Embedded content of the kanban-md skill.
-const KANBAN_MD_SKILL: &str = include_str!("skills/kanban-md/SKILL.md");
-/// Embedded content of the kanban-md JSON schemas reference.
-const KANBAN_MD_REFS_JSON_SCHEMAS: &str =
-    include_str!("skills/kanban-md/references/json-schemas.md");
+/// Embedded content of the kanban-mdx skill.
+const KANBAN_MDX_SKILL: &str = include_str!("skills/kanban-mdx/SKILL.md");
+/// Embedded content of the kanban-mdx JSON schemas reference.
+const KANBAN_MDX_REFS_JSON_SCHEMAS: &str =
+    include_str!("skills/kanban-mdx/references/json-schemas.md");
 /// Embedded content of the kanban-based-development skill.
 const KANBAN_BASED_DEV_SKILL: &str =
     include_str!("skills/kanban-based-development/SKILL.md");
@@ -38,7 +38,7 @@ pub struct SkillInfo {
 /// All available built-in skills.
 pub const AVAILABLE_SKILLS: &[SkillInfo] = &[
     SkillInfo {
-        name: "kanban-md",
+        name: "kanban-mdx",
         description: "Task management commands, workflows, and decision trees",
     },
     SkillInfo {
@@ -55,7 +55,7 @@ pub fn skill_names() -> Vec<&'static str> {
 /// Reads the embedded SKILL.md content for the named skill.
 pub fn read_embedded_skill(name: &str) -> Option<&'static str> {
     match name {
-        "kanban-md" => Some(KANBAN_MD_SKILL),
+        "kanban-mdx" => Some(KANBAN_MDX_SKILL),
         "kanban-based-development" => Some(KANBAN_BASED_DEV_SKILL),
         _ => None,
     }
@@ -73,14 +73,14 @@ pub struct EmbeddedFile {
 /// Returns all embedded files for the named skill.
 pub fn embedded_files(name: &str) -> Vec<EmbeddedFile> {
     match name {
-        "kanban-md" => vec![
+        "kanban-mdx" => vec![
             EmbeddedFile {
                 rel_path: "SKILL.md",
-                content: KANBAN_MD_SKILL,
+                content: KANBAN_MDX_SKILL,
             },
             EmbeddedFile {
                 rel_path: "references/json-schemas.md",
-                content: KANBAN_MD_REFS_JSON_SCHEMAS,
+                content: KANBAN_MDX_REFS_JSON_SCHEMAS,
             },
         ],
         "kanban-based-development" => vec![EmbeddedFile {
@@ -214,7 +214,7 @@ fn home_dir() -> Option<PathBuf> {
 // Version management
 // ---------------------------------------------------------------------------
 
-const VERSION_PREFIX: &str = "<!-- kanban-md-skill-version: ";
+const VERSION_PREFIX: &str = "<!-- kanban-mdx-skill-version: ";
 const VERSION_SUFFIX: &str = " -->";
 
 /// Returns the current CLI version for embedding in skills.
@@ -263,7 +263,7 @@ pub fn is_outdated(path: &Path, current_version: &str) -> bool {
     }
 }
 
-/// Scans a base directory for installed kanban-md skills.
+/// Scans a base directory for installed kanban-mdx skills.
 /// Returns a map of skill name to SKILL.md path.
 pub fn find_installed_skills(base_dir: &Path) -> Vec<(String, PathBuf)> {
     let mut result = Vec::new();
@@ -325,7 +325,7 @@ pub fn check_skill_staleness(project_root: &Path) {
         if is_outdated(skill_path, ver) {
             if let Some(old_ver) = installed_version(skill_path) {
                 eprintln!(
-                    "hint: kanban-md skill outdated ({old_ver} -> {ver}), run: kanban-md skill update"
+                    "hint: kanban-mdx skill outdated ({old_ver} -> {ver}), run: kbmdx skill update"
                 );
                 return; // One warning is enough.
             }
@@ -367,14 +367,14 @@ mod tests {
     fn test_available_skills() {
         let names = skill_names();
         assert_eq!(names.len(), 2);
-        assert_eq!(names[0], "kanban-md");
+        assert_eq!(names[0], "kanban-mdx");
         assert_eq!(names[1], "kanban-based-development");
     }
 
     #[test]
     fn test_read_embedded_skill() {
-        let content = read_embedded_skill("kanban-md").unwrap();
-        assert!(content.contains("kanban-md"));
+        let content = read_embedded_skill("kanban-mdx").unwrap();
+        assert!(content.contains("kanban-mdx"));
         assert!(!content.is_empty());
 
         let content = read_embedded_skill("kanban-based-development").unwrap();
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn test_embedded_files() {
-        let files = embedded_files("kanban-md");
+        let files = embedded_files("kanban-mdx");
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].rel_path, "SKILL.md");
         assert_eq!(files[1].rel_path, "references/json-schemas.md");
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn test_version_comment() {
         let comment = version_comment("1.2.3");
-        assert_eq!(comment, "<!-- kanban-md-skill-version: 1.2.3 -->");
+        assert_eq!(comment, "<!-- kanban-mdx-skill-version: 1.2.3 -->");
     }
 
     #[test]
@@ -455,7 +455,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("SKILL.md");
 
-        let content = "---\nname: test\n---\n<!-- kanban-md-skill-version: 0.19.0 -->\n# Test\n";
+        let content = "---\nname: test\n---\n<!-- kanban-mdx-skill-version: 0.19.0 -->\n# Test\n";
         fs::write(&path, content).unwrap();
 
         let ver = installed_version(&path).unwrap();
@@ -484,7 +484,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("SKILL.md");
 
-        let content = "---\nname: test\n---\n<!-- kanban-md-skill-version: 0.18.0 -->\n# Test\n";
+        let content = "---\nname: test\n---\n<!-- kanban-mdx-skill-version: 0.18.0 -->\n# Test\n";
         fs::write(&path, content).unwrap();
 
         assert!(is_outdated(&path, "0.19.0"));
@@ -496,7 +496,7 @@ mod tests {
         let input = "---\nname: test\ndescription: a test\n---\n# Title\nBody\n";
         let result = inject_version_comment(input, "1.0.0");
 
-        assert!(result.contains("---\n<!-- kanban-md-skill-version: 1.0.0 -->"));
+        assert!(result.contains("---\n<!-- kanban-mdx-skill-version: 1.0.0 -->"));
         assert!(result.starts_with("---\n"));
     }
 
@@ -505,7 +505,7 @@ mod tests {
         let input = "# Title\nNo frontmatter\n";
         let result = inject_version_comment(input, "1.0.0");
 
-        assert!(result.starts_with("<!-- kanban-md-skill-version: 1.0.0 -->\n"));
+        assert!(result.starts_with("<!-- kanban-mdx-skill-version: 1.0.0 -->\n"));
     }
 
     #[test]
@@ -513,16 +513,16 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
 
         // Create a skill with a version comment.
-        let skill_dir = tmp.path().join("kanban-md");
+        let skill_dir = tmp.path().join("kanban-mdx");
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(
             skill_dir.join("SKILL.md"),
-            "---\nname: test\n---\n<!-- kanban-md-skill-version: 1.0.0 -->\n# Test\n",
+            "---\nname: test\n---\n<!-- kanban-mdx-skill-version: 1.0.0 -->\n# Test\n",
         )
         .unwrap();
 
         let found = find_installed_skills(tmp.path());
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].0, "kanban-md");
+        assert_eq!(found[0].0, "kanban-mdx");
     }
 }

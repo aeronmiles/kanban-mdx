@@ -1,4 +1,4 @@
-//! `kanban-md config` — get or set config values.
+//! `kbmdx config` — get or set config values.
 
 use std::io::Write;
 

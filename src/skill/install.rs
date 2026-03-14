@@ -50,16 +50,16 @@ mod tests {
     fn test_install_kanban_md() {
         let tmp = tempfile::tempdir().unwrap();
 
-        install("kanban-md", tmp.path(), "1.0.0").unwrap();
+        install("kanban-mdx", tmp.path(), "1.0.0").unwrap();
 
         // Check SKILL.md was written with version comment.
-        let skill_md = tmp.path().join("kanban-md/SKILL.md");
+        let skill_md = tmp.path().join("kanban-mdx/SKILL.md");
         let data = fs::read_to_string(&skill_md).unwrap();
-        assert!(data.contains("<!-- kanban-md-skill-version: 1.0.0 -->"));
-        assert!(data.contains("kanban-md"));
+        assert!(data.contains("<!-- kanban-mdx-skill-version: 1.0.0 -->"));
+        assert!(data.contains("kanban-mdx"));
 
         // Check references subdirectory.
-        let ref_path = tmp.path().join("kanban-md/references/json-schemas.md");
+        let ref_path = tmp.path().join("kanban-mdx/references/json-schemas.md");
         assert!(ref_path.exists());
 
         // Check version is readable.
@@ -83,10 +83,10 @@ mod tests {
     fn test_install_overwrite() {
         let tmp = tempfile::tempdir().unwrap();
 
-        install("kanban-md", tmp.path(), "1.0.0").unwrap();
-        install("kanban-md", tmp.path(), "2.0.0").unwrap();
+        install("kanban-mdx", tmp.path(), "1.0.0").unwrap();
+        install("kanban-mdx", tmp.path(), "2.0.0").unwrap();
 
-        let skill_md = tmp.path().join("kanban-md/SKILL.md");
+        let skill_md = tmp.path().join("kanban-mdx/SKILL.md");
         let ver = crate::skill::installed_version(&skill_md).unwrap();
         assert_eq!(ver, "2.0.0");
     }

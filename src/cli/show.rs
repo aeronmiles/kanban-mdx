@@ -1,4 +1,4 @@
-//! `kanban-md show` — show task details.
+//! `kbmdx show` — show task details.
 
 use std::collections::BTreeMap;
 use std::io::Write;

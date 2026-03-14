@@ -1,4 +1,4 @@
-//! `kanban-md pick` — pick the highest-priority unclaimed task.
+//! `kbmdx pick` — pick the highest-priority unclaimed task.
 
 use chrono::Utc;
 

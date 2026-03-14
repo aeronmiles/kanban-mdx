@@ -1,4 +1,4 @@
-//! `kanban-md log` — show mutation log.
+//! `kbmdx log` — show mutation log.
 
 use std::io::Write;
 

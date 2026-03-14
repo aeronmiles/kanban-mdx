@@ -1,13 +1,13 @@
 ---
 name: kanban-based-development
 description: >
-  Autonomous, parallel-safe development workflow using kanban-md.
+  Autonomous, parallel-safe development workflow using kanban-mdx.
   Use when the user asks to work through tasks, do kanban-based development,
   or when multiple agents need to coordinate work on the same codebase.
   Optimized for explicit handoffs and a "defer to user" protocol when
   human intervention is required.
 allowed-tools:
-  - Bash(kanban-md *)
+  - Bash(kbmdx *)
   - Bash(kbmd *)
   - Bash(git *)
   - Bash(go *)
@@ -17,7 +17,7 @@ allowed-tools:
 
 # Kanban-Based Development
 
-Autonomous, parallel-safe development using `kanban-md` to coordinate work on a shared board.
+Autonomous, parallel-safe development using `kbmdx` to coordinate work on a shared board.
 Claims prevent duplicate work; `review` is the waiting room (handoff, user action, merge, decisions).
 
 ## Multi-Agent Environment
@@ -36,11 +36,11 @@ The **claim** mechanic is the coordination primitive. It prevents two agents fro
 - **Never steal a live claim.** If it's claimed, pick something else.
 - **Never release someone else’s claim.** Only use `edit --release` for your own work (or when the user explicitly asks).
 - **Always leave a handoff.** Before you park a task, write a short update in the body so someone else can continue.
-- **Refresh claims to avoid timeout.** If the task might take longer than `claim_timeout`, periodically renew your claim: `kanban-md edit <ID> --claim <agent>`.
+- **Refresh claims to avoid timeout.** If the task might take longer than `claim_timeout`, periodically renew your claim: `kbmdx edit <ID> --claim <agent>`.
 
 ## Board Home vs Worktrees (simple rule)
 
-- **Always run `kanban-md` from board home** (the canonical repo directory that owns the shared board).
+- **Always run `kbmdx` from board home** (the canonical repo directory that owns the shared board).
 - **Always do code changes in a task worktree.** Never edit code in board home.
 - If the board is git-tracked, **commit board changes on `main` as a separate commit** after the task is merged and moved to `done`.
 
@@ -53,12 +53,12 @@ pwd   # remember this path as <board-home>
 
 Recommended: keep two shells (or split panes) open:
 
-- **Board shell** at `<board-home>` for `kanban-md` commands
+- **Board shell** at `<board-home>` for `kbmdx` commands
 - **Worktree shell** at the task worktree for code changes
 
-Do not run multiple mutating `kanban-md` commands in parallel against the same board directory.
+Do not run multiple mutating `kbmdx` commands in parallel against the same board directory.
 
-If you are unsure you’re using the shared board, run `kanban-md board --compact` and confirm the board name/shape is what you expect.
+If you are unsure you’re using the shared board, run `kbmdx board --compact` and confirm the board name/shape is what you expect.
 
 ## Defer-to-User Boundary (exceptions)
 
@@ -76,7 +76,7 @@ Defer to the user (leave the task in `review` with a handoff) only when you need
 Each agent session must generate a unique name to identify itself for claims. At the very start of a session, run:
 
 ```bash
-kanban-md agent-name
+kbmdx agent-name
 ```
 
 This produces a name like `quiet-storm` or `frost-maple`. **Remember this name in your context** and use it as a literal string in all claim/release commands for the rest of the session. Do not store it in a file or environment variable — those are not persistent or isolated between agents.
@@ -102,13 +102,13 @@ From board home:
 Pick only from startable columns to avoid accidentally re-picking `review` work:
 
 ```bash
-kanban-md pick --claim <agent> --status todo --move in-progress
+kbmdx pick --claim <agent> --status todo --move in-progress
 ```
 
 If `todo` is empty:
 
 ```bash
-kanban-md pick --claim <agent> --status backlog --move in-progress
+kbmdx pick --claim <agent> --status backlog --move in-progress
 ```
 
 This is atomic — if another agent claims the task between your list and claim, `pick` handles it safely. No need to list/choose/claim manually.
@@ -116,7 +116,7 @@ This is atomic — if another agent claims the task between your list and claim,
 After picking, read the full task:
 
 ```bash
-kanban-md show <ID>
+kbmdx show <ID>
 ```
 
 ### 2) Create a worktree (default)
@@ -124,8 +124,8 @@ kanban-md show <ID>
 Create a worktree for the task branch from board home:
 
 ```bash
-git worktree add ../kanban-md-task-<ID> -b task/<ID>-<kebab-description>
-cd ../kanban-md-task-<ID>
+git worktree add ../kbmdx-task-<ID> -b task/<ID>-<kebab-description>
+cd ../kbmdx-task-<ID>
 ```
 
 Skip a worktree only for truly non-conflicting work (e.g., board-only changes or writing an untracked research report). If you touch tracked code/config, use a worktree.
@@ -151,7 +151,7 @@ git commit -m "feat: <description>"
 While a task is `in-progress`, leave short timestamped notes in the task body from **board home** (especially after major steps or before/after running tests). This makes handoffs and reviews much faster.
 
 ```bash
-kanban-md edit <ID> --append-body "Implemented X/Y/Z, now running tests." --timestamp --claim <agent>
+kbmdx edit <ID> --append-body "Implemented X/Y/Z, now running tests." --timestamp --claim <agent>
 ```
 
 The `--append-body` (`-a`) flag appends text to the existing body without replacing it. The `--timestamp` (`-t`) flag prefixes a timestamp line like `[[2026-02-10]] Mon 15:04`.
@@ -166,7 +166,7 @@ git switch main
 git status
 ```
 
-If `git status` shows unexpected changes outside the board directory (usually `kanban/`) or a git operation in progress, do not proceed. Park the task in `review` and move on.
+If `git status` shows unexpected changes outside the board directory (usually `.kbmdx/`) or a git operation in progress, do not proceed. Park the task in `review` and move on.
 
 Merge and re-run tests on main:
 
@@ -183,7 +183,7 @@ To park a “ready to merge” task:
 From board home:
 
 ```bash
-kanban-md handoff <ID> --claim <agent> --note "Ready to merge: task/<ID>-…; remaining: …" --timestamp --release
+kbmdx handoff <ID> --claim <agent> --note "Ready to merge: task/<ID>-…; remaining: …" --timestamp --release
 ```
 
 ### 5) Mark done (only after merge)
@@ -193,8 +193,8 @@ Only after the merge is on main and checks pass:
 From board home:
 
 ```bash
-kanban-md edit <ID> --release
-kanban-md move <ID> done
+kbmdx edit <ID> --release
+kbmdx move <ID> done
 ```
 
 ### 6) Commit board changes (only if board is git-tracked)
@@ -202,14 +202,14 @@ kanban-md move <ID> done
 From board home:
 
 ```bash
-git add kanban/config.toml kanban/tasks/
+git add .kbmdx/config.toml .kbmdx/tasks/
 git commit -m "chore(board): update task #<ID>"
 ```
 
 ### 7) Optional cleanup
 
 ```bash
-git worktree remove --force ../kanban-md-task-<ID>
+git worktree remove --force ../kbmdx-task-<ID>
 git branch -d task/<ID>-<kebab-description>
 ```
 
@@ -220,7 +220,7 @@ If you cannot continue without the user (decision, access, environment, or anyth
 From board home:
 
 ```bash
-kanban-md handoff <ID> --claim <agent> \
+kbmdx handoff <ID> --claim <agent> \
   --block "Waiting on user: <what you need>" \
   --note "## Handoff
 - Current state:
@@ -245,9 +245,9 @@ When the user answers and you need to continue, re-claim and move back to `in-pr
 From board home:
 
 ```bash
-kanban-md edit <ID> --claim <agent>
-kanban-md edit <ID> --unblock --claim <agent>   # if it was blocked
-kanban-md move <ID> in-progress --claim <agent>
+kbmdx edit <ID> --claim <agent>
+kbmdx edit <ID> --unblock --claim <agent>   # if it was blocked
+kbmdx move <ID> in-progress --claim <agent>
 ```
 
 ## Status meanings (keep the board honest)
@@ -262,6 +262,6 @@ kanban-md move <ID> in-progress --claim <agent>
 
 If `pick` returns "no unblocked, unclaimed tasks found":
 
-- Check blocked work: `kanban-md list --compact --blocked`
-- Check waiting work: `kanban-md list --compact --status review`
+- Check blocked work: `kbmdx list --compact --blocked`
+- Check waiting work: `kbmdx list --compact --status review`
 - If everything is waiting on the user, ask targeted questions and stop (don't thrash the board).

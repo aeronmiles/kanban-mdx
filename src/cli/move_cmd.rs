@@ -1,4 +1,4 @@
-//! `kanban-md move` — move a task to a new status.
+//! `kbmdx move` — move a task to a new status.
 
 use std::io::Write;
 use chrono::Utc;

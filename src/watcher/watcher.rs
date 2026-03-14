@@ -39,7 +39,7 @@ pub enum WatchEvent {
 /// use std::path::Path;
 /// use kanban_mdx::watcher::Watcher;
 ///
-/// let watcher = Watcher::new(Path::new("kanban/tasks")).unwrap();
+/// let watcher = Watcher::new(Path::new(".kbmdx/tasks")).unwrap();
 /// // In your event loop:
 /// if let Ok(event) = watcher.events().try_recv() {
 ///     println!("Board changed: {:?}", event);

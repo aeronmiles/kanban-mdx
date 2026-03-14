@@ -1,4 +1,4 @@
-//! `kanban-md worktrees` — list git worktrees.
+//! `kbmdx worktrees` — list git worktrees.
 
 use std::collections::{HashMap, HashSet};
 use std::io::Write;

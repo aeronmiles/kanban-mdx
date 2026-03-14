@@ -1,4 +1,4 @@
-//! `kanban-md board` — show board summary.
+//! `kbmdx board` — show board summary.
 
 use std::io::Write;
 use std::time::Duration;
