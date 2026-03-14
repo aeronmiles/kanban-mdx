@@ -1,4 +1,12 @@
 pub mod app;
+mod types;
+mod jump;
+mod board_nav;
+mod context;
+mod detail_nav;
+mod semantic;
+mod persistence;
+mod actions;
 mod keys;
 pub mod render;
 pub mod search;
@@ -57,7 +65,7 @@ pub fn run_tui(cfg: Config, tasks: Vec<Task>) -> Result<()> {
         // In perf mode, only redraw when state has changed.
         // In non-perf mode, redraw unconditionally (for A/B comparison).
         if app.debug.needs_redraw || !app.debug.perf_mode {
-            terminal.draw(|frame| render::render(&app, frame))?;
+            terminal.draw(|frame| render::render(&mut app, frame))?;
             app.update_fps();
             app.debug.needs_redraw = false;
         }

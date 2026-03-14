@@ -108,8 +108,8 @@ pub(super) fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
     let fps_text = format!(
         " {:.0}fps  {}  b:{}ms r:{}ms L:{} V:{} ",
         app.debug.fps, perf_label,
-        app.debug.dbg_build_ms.get(), app.debug.dbg_render_ms.get(),
-        app.debug.dbg_lines.get(), app.debug.dbg_vrows.get(),
+        app.debug.dbg_build_ms, app.debug.dbg_render_ms,
+        app.debug.dbg_lines, app.debug.dbg_vrows,
     );
     let fps_len = fps_text.chars().count();
 
@@ -230,9 +230,9 @@ pub(super) fn render_suggestions(
     );
 }
 
-pub(super) fn render_reader_panel(app: &App, frame: &mut Frame, area: Rect) {
+pub(super) fn render_reader_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let task = match app.active_task() {
-        Some(t) => t,
+        Some(t) => t.clone(),
         None => {
             let block = Block::new()
                 .title(" Reader ")
@@ -259,12 +259,12 @@ pub(super) fn render_reader_panel(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(block, area);
 
     let t0 = std::time::Instant::now();
-    let content = build_detail_lines(app, task, inner.width);
+    let content = build_detail_lines(app, &task, inner.width);
     let t1 = std::time::Instant::now();
     render_scrolled_content(&content, app.reader_scroll, inner, frame, None);
     let t2 = std::time::Instant::now();
-    app.debug.dbg_build_ms.set(t1.duration_since(t0).as_millis());
-    app.debug.dbg_render_ms.set(t2.duration_since(t1).as_millis());
-    app.debug.dbg_lines.set(content.lines.len());
-    app.debug.dbg_vrows.set(content.total_vrows());
+    app.debug.dbg_build_ms = t1.duration_since(t0).as_millis();
+    app.debug.dbg_render_ms = t2.duration_since(t1).as_millis();
+    app.debug.dbg_lines = content.lines.len();
+    app.debug.dbg_vrows = content.total_vrows();
 }

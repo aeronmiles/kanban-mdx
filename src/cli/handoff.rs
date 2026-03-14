@@ -5,7 +5,6 @@ use chrono::Utc;
 
 use crate::cli::root::Cli;
 use crate::error::{CliError, ErrorCode};
-use crate::model::task;
 use crate::output::Format;
 
 #[derive(clap::Args, Clone)]
@@ -32,16 +31,9 @@ pub struct HandoffArgs {
 pub fn run(cli: &Cli, args: HandoffArgs) -> Result<(), CliError> {
     let format = crate::cli::root::output_format(cli);
     let cfg = crate::cli::root::load_config(cli)?;
-    let tasks_path = cfg.tasks_path();
+    let id = super::helpers::parse_task_id(&args.id)?;
 
-    let id: i32 = args.id.trim_start_matches('#').parse().map_err(|_| {
-        CliError::newf(ErrorCode::InvalidTaskId, format!("invalid task ID: {}", args.id))
-    })?;
-
-    let file_path = task::find_by_id(&tasks_path, id)
-        .map_err(|e| CliError::newf(ErrorCode::TaskNotFound, format!("{e}")))?;
-    let mut t = task::read(&file_path)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
+    let (file_path, mut t) = super::helpers::load_task(&cfg, id)?;
 
     let now = Utc::now();
 
@@ -70,8 +62,7 @@ pub fn run(cli: &Cli, args: HandoffArgs) -> Result<(), CliError> {
     }
 
     t.updated = now;
-    task::write(&file_path, &t)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("failed to write: {e}")))?;
+    super::helpers::save_task(&file_path, &t)?;
 
     let mut stdout = std::io::stdout();
     match format {

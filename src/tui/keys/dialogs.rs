@@ -1,6 +1,6 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::tui::app::{App, AppView};
+use crate::tui::app::{delete_word_back, App, AppView};
 
 impl App {
     // ── MoveTask View ───────────────────────────────────────────────
@@ -29,7 +29,13 @@ impl App {
                     self.view = AppView::Board;
                 }
                 KeyCode::Backspace => {
-                    self.picker.move_filter.pop();
+                    if key.modifiers.contains(KeyModifiers::SUPER) {
+                        self.picker.move_filter.clear();
+                    } else if key.modifiers.contains(KeyModifiers::ALT) {
+                        delete_word_back(&mut self.picker.move_filter);
+                    } else {
+                        self.picker.move_filter.pop();
+                    }
                     self.picker.move_cursor = 0;
                 }
                 KeyCode::Down | KeyCode::Char(']') => {

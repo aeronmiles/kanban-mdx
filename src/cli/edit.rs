@@ -1,7 +1,7 @@
 //! `kbmdx edit` — edit one or more existing tasks.
 
 use std::io::Write;
-use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{NaiveTime, TimeZone, Utc};
 
 use crate::cli::root::Cli;
 use crate::error::{CliError, ErrorCode};
@@ -203,15 +203,9 @@ fn edit_one(
     args: &EditArgs,
     id_str: &str,
 ) -> Result<EditResult, CliError> {
-    let id: i32 = id_str
-        .trim_start_matches('#')
-        .parse()
-        .map_err(|_| CliError::newf(ErrorCode::InvalidTaskId, format!("invalid task ID: {id_str}")))?;
+    let id = super::helpers::parse_task_id(id_str)?;
 
-    let file_path =
-        task::find_by_id(&cfg.tasks_path(), id).map_err(|e| CliError::newf(ErrorCode::TaskNotFound, format!("{e}")))?;
-    let mut t =
-        task::read(&file_path).map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
+    let (file_path, mut t) = super::helpers::load_task(cfg, id)?;
 
     // --- Task #16: --force branch enforcement check ---
     if cfg.status_requires_branch(&t.status) && !args.force {
@@ -232,9 +226,7 @@ fn edit_one(
         t.tags = tags.clone();
     }
     if let Some(ref due) = args.due {
-        t.due = Some(chrono::NaiveDate::parse_from_str(due, "%Y-%m-%d").map_err(|_| {
-            CliError::newf(ErrorCode::InvalidDate, format!("invalid date: {due}"))
-        })?);
+        t.due = Some(super::helpers::parse_date(due)?);
     }
     if let Some(ref estimate) = args.estimate {
         t.estimate = estimate.clone();
@@ -335,16 +327,12 @@ fn edit_one(
 
     // --- Task #15: --started / --completed and --clear-started / --clear-completed ---
     if let Some(ref started_str) = args.started {
-        let date = NaiveDate::parse_from_str(started_str, "%Y-%m-%d").map_err(|_| {
-            CliError::newf(ErrorCode::InvalidDate, format!("invalid started date: {started_str}"))
-        })?;
+        let date = super::helpers::parse_date(started_str)?;
         let dt = date.and_time(NaiveTime::MIN);
         t.started = Some(Utc.from_utc_datetime(&dt));
     }
     if let Some(ref completed_str) = args.completed {
-        let date = NaiveDate::parse_from_str(completed_str, "%Y-%m-%d").map_err(|_| {
-            CliError::newf(ErrorCode::InvalidDate, format!("invalid completed date: {completed_str}"))
-        })?;
+        let date = super::helpers::parse_date(completed_str)?;
         let dt = date.and_time(NaiveTime::MIN);
         t.completed = Some(Utc.from_utc_datetime(&dt));
     }
@@ -357,55 +345,156 @@ fn edit_one(
 
     // --- Task #70: --status (same enforcement checks as `move`) ---
     if let Some(ref new_status) = args.status {
-        let valid_statuses = cfg.status_names();
-        if !valid_statuses.contains(new_status) {
-            return Err(CliError::newf(
-                ErrorCode::InvalidStatus,
-                format!(
-                    "unknown status {:?} (valid: {})",
-                    new_status,
-                    valid_statuses.join(", ")
-                ),
-            ));
-        }
-
-        let old_status = t.status.clone();
-
-        // Branch enforcement: check require_branch on the target status.
-        if cfg.status_requires_branch(new_status) && !args.force {
-            crate::cli::branch_check::enforce_branch_match(id, &t.branch, new_status)?;
-        }
-
-        // WIP limit enforcement (class-level board-wide + column-level).
-        crate::cli::wip::enforce_wip_limits(cfg, &t.class, new_status, id)?;
-
-        // Claim requirement enforcement on the target status.
-        if cfg.status_requires_claim(new_status) && t.claimed_by.is_empty() && args.claim.is_none() {
-            return Err(CliError::newf(
-                ErrorCode::ClaimRequired,
-                format!("status {:?} requires a claim (use --claim)", new_status),
-            ));
-        }
-
-        // Branch requirement enforcement on the target status.
-        if cfg.status_requires_branch(new_status) && t.branch.is_empty() && !args.force {
-            return Err(CliError::newf(
-                ErrorCode::StatusConflict,
-                format!("status {:?} requires a branch (use --force to override)", new_status),
-            ));
-        }
-
-        task::update_timestamps(&mut t, &old_status, new_status, cfg);
-        t.status = new_status.clone();
+        apply_status_change(cfg, &mut t, id, new_status, args.force, args.claim.is_some())?;
     }
 
     t.updated = Utc::now();
-    task::write(&file_path, &t)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("failed to write: {e}")))?;
+    super::helpers::save_task(&file_path, &t)?;
 
     Ok(EditResult {
         id,
         title: t.title.clone(),
         task: t,
     })
+}
+
+/// Validates and applies a status transition with full enforcement checks.
+fn apply_status_change(
+    cfg: &crate::model::config::Config,
+    t: &mut task::Task,
+    id: i32,
+    new_status: &str,
+    force: bool,
+    has_claim: bool,
+) -> Result<(), CliError> {
+    let valid_statuses = cfg.status_names();
+    if !valid_statuses.contains(&new_status.to_string()) {
+        return Err(CliError::newf(
+            ErrorCode::InvalidStatus,
+            format!(
+                "unknown status {:?} (valid: {})",
+                new_status,
+                valid_statuses.join(", ")
+            ),
+        ));
+    }
+
+    let old_status = t.status.clone();
+
+    if cfg.status_requires_branch(new_status) && !force {
+        crate::cli::branch_check::enforce_branch_match(id, &t.branch, new_status)?;
+    }
+
+    crate::cli::wip::enforce_wip_limits(cfg, &t.class, new_status, id)?;
+
+    if cfg.status_requires_claim(new_status) && t.claimed_by.is_empty() && !has_claim {
+        return Err(CliError::newf(
+            ErrorCode::ClaimRequired,
+            format!("status {:?} requires a claim (use --claim)", new_status),
+        ));
+    }
+
+    if cfg.status_requires_branch(new_status) && t.branch.is_empty() && !force {
+        return Err(CliError::newf(
+            ErrorCode::StatusConflict,
+            format!(
+                "status {:?} requires a branch (use --force to override)",
+                new_status
+            ),
+        ));
+    }
+
+    task::update_timestamps(t, &old_status, new_status, cfg);
+    t.status = new_status.to_string();
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::config::Config;
+
+    fn test_config() -> Config {
+        let dir = std::env::temp_dir().join(format!("kbmdx-test-edit-{}", std::process::id()));
+        let tasks_dir = dir.join("tasks");
+        std::fs::create_dir_all(&tasks_dir).unwrap();
+        let mut cfg = Config::new_default("test");
+        cfg.set_dir(dir);
+        cfg
+    }
+
+    #[test]
+    fn apply_status_change_valid() {
+        let cfg = test_config();
+        let mut t = task::Task {
+            id: 1,
+            status: "todo".to_string(),
+            claimed_by: "agent".to_string(),
+            ..Default::default()
+        };
+        // in-progress requires claim — task has one
+        let result = apply_status_change(&cfg, &mut t, 1, "in-progress", false, false);
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        assert_eq!(t.status, "in-progress");
+    }
+
+    #[test]
+    fn apply_status_change_invalid_status() {
+        let cfg = test_config();
+        let mut t = task::Task {
+            id: 1,
+            status: "todo".to_string(),
+            ..Default::default()
+        };
+        let result = apply_status_change(&cfg, &mut t, 1, "nonexistent", false, false);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidStatus);
+    }
+
+    #[test]
+    fn apply_status_requires_claim() {
+        let cfg = test_config();
+        let mut t = task::Task {
+            id: 1,
+            status: "todo".to_string(),
+            ..Default::default()
+        };
+        // in-progress requires claim — task has none
+        let result = apply_status_change(&cfg, &mut t, 1, "in-progress", false, false);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code, ErrorCode::ClaimRequired);
+    }
+
+    #[test]
+    fn apply_status_sets_started_timestamp() {
+        let cfg = test_config();
+        // "backlog" is the initial (first) status in default config
+        let mut t = task::Task {
+            id: 1,
+            status: "backlog".to_string(),
+            claimed_by: "agent".to_string(),
+            ..Default::default()
+        };
+        assert!(t.started.is_none());
+        // Moving from initial → non-initial sets started
+        let result = apply_status_change(&cfg, &mut t, 1, "in-progress", false, false);
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        assert!(t.started.is_some(), "started should be set on first move out of initial status");
+    }
+
+    #[test]
+    fn apply_status_sets_completed_on_terminal() {
+        let cfg = test_config();
+        let mut t = task::Task {
+            id: 1,
+            status: "in-progress".to_string(),
+            started: Some(Utc::now()),
+            ..Default::default()
+        };
+        // done doesn't require claim in default config
+        let result = apply_status_change(&cfg, &mut t, 1, "done", false, false);
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        assert!(t.completed.is_some(), "completed should be set on terminal status");
+    }
 }

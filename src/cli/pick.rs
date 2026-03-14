@@ -75,10 +75,7 @@ pub fn run(cli: &Cli, args: PickArgs) -> Result<(), CliError> {
     let id = picked.id;
 
     // Apply claim and move if requested
-    let file_path = task::find_by_id(&cfg.tasks_path(), id)
-        .map_err(|e| CliError::newf(ErrorCode::TaskNotFound, format!("{e}")))?;
-    let mut t = task::read(&file_path)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
+    let (file_path, mut t) = super::helpers::load_task(&cfg, id)?;
 
     if let Some(ref claim) = args.claim {
         t.claimed_by = claim.clone();
@@ -106,8 +103,7 @@ pub fn run(cli: &Cli, args: PickArgs) -> Result<(), CliError> {
     }
 
     t.updated = Utc::now();
-    task::write(&file_path, &t)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("failed to write: {e}")))?;
+    super::helpers::save_task(&file_path, &t)?;
 
     if args.no_body {
         t.body.clear();

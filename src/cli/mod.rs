@@ -2,6 +2,7 @@ pub mod agent_name;
 pub mod archive;
 pub mod board;
 pub mod branch_check;
+pub mod helpers;
 pub mod completion;
 pub mod config;
 pub mod context;

@@ -13,7 +13,7 @@ use crate::tui::theme;
 use super::chrome::{render_reader_panel, render_search_bar, render_status_bar};
 use super::layout::{pad_right, truncate};
 
-pub(super) fn render_board(app: &App, frame: &mut Frame) {
+pub(super) fn render_board(app: &mut App, frame: &mut Frame) {
     let area = frame.area();
 
     let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);

@@ -86,6 +86,4 @@ pub struct GroupSummary {
     pub total: i32,
 }
 
-fn is_zero(v: &i32) -> bool {
-    *v == 0
-}
+use crate::util::serde_helpers::is_zero;

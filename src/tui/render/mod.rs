@@ -26,7 +26,7 @@ use dialogs::{render_create_dialog, render_delete_confirm, render_goto_dialog, r
 use overlays::{render_debug, render_help, render_search_help};
 use pickers::{render_branch_picker, render_confirm_branch, render_context_picker};
 
-pub fn render(app: &App, frame: &mut Frame) {
+pub fn render(app: &mut App, frame: &mut Frame) {
     theme::set_active(app.theme_kind);
     theme::set_adjustments(app.brightness, app.saturation);
     match app.view {

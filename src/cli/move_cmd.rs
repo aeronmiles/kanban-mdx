@@ -32,9 +32,7 @@ pub fn run(cli: &Cli, args: MoveArgs) -> Result<(), CliError> {
     let format = crate::cli::root::output_format(cli);
     let cfg = crate::cli::root::load_config(cli)?;
 
-    let id: i32 = args.id.trim_start_matches('#').parse().map_err(|_| {
-        CliError::newf(ErrorCode::InvalidTaskId, format!("invalid task ID: {}", args.id))
-    })?;
+    let id = super::helpers::parse_task_id(&args.id)?;
 
     // Validate flag combinations: status arg conflicts with --next/--prev.
     if args.status.is_some() && (args.next || args.prev) {
@@ -50,10 +48,7 @@ pub fn run(cli: &Cli, args: MoveArgs) -> Result<(), CliError> {
         ));
     }
 
-    let file_path = task::find_by_id(&cfg.tasks_path(), id)
-        .map_err(|e| CliError::newf(ErrorCode::TaskNotFound, format!("{e}")))?;
-    let mut t = task::read(&file_path)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
+    let (file_path, mut t) = super::helpers::load_task(&cfg, id)?;
 
     // Resolve the target status.
     let valid_statuses = cfg.status_names();
@@ -192,8 +187,7 @@ pub fn run(cli: &Cli, args: MoveArgs) -> Result<(), CliError> {
         t.claimed_at = Some(Utc::now());
     }
 
-    task::write(&file_path, &t)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("failed to write: {e}")))?;
+    super::helpers::save_task(&file_path, &t)?;
 
     let mut stdout = std::io::stdout();
     match format {

@@ -26,9 +26,7 @@ pub fn run(cli: &Cli, args: DepsArgs) -> Result<(), CliError> {
     let format = crate::cli::root::output_format(cli);
     let cfg = crate::cli::root::load_config(cli)?;
 
-    let id: i32 = args.id.trim_start_matches('#').parse().map_err(|_| {
-        CliError::newf(ErrorCode::InvalidTaskId, format!("invalid task ID: {}", args.id))
-    })?;
+    let id = super::helpers::parse_task_id(&args.id)?;
 
     let (all_tasks, _) = task::read_all_lenient(&cfg.tasks_path())
         .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;

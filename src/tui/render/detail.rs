@@ -14,9 +14,9 @@ use crate::tui::app::{self, App};
 use crate::tui::theme;
 use super::chrome::render_suggestions;
 
-pub(super) fn render_detail(app: &App, frame: &mut Frame) {
+pub(super) fn render_detail(app: &mut App, frame: &mut Frame) {
     let task = match app.active_task() {
-        Some(t) => t,
+        Some(t) => t.clone(),
         None => {
             let msg = Paragraph::new("No task selected").style(theme::dim());
             frame.render_widget(msg, frame.area());
@@ -137,7 +137,7 @@ pub(super) fn render_detail(app: &App, frame: &mut Frame) {
         );
     }
 
-    let content = build_detail_lines(app, task, content_width);
+    let content = build_detail_lines(app, &task, content_width);
 
     let find_ctx = if !app.detail.find_query.is_empty() {
         Some(FindContext {
@@ -272,29 +272,26 @@ pub(super) fn render_detail(app: &App, frame: &mut Frame) {
 /// Build the content lines for a task detail view (shared by detail view
 /// and reader panel).  Returns a `DetailContent` with precomputed visual-row
 /// offsets so per-frame scroll arithmetic is O(1)/O(log n).
-pub(crate) fn build_detail_lines(app: &App, task: &Task, width: u16) -> app::DetailContent {
+pub(crate) fn build_detail_lines(app: &mut App, task: &Task, width: u16) -> app::DetailContent {
     let bq = (app.brightness * app::THEME_QUANTIZE) as i32;
     let sq = (app.saturation * app::THEME_QUANTIZE) as i32;
     let updated_epoch = task.updated.timestamp();
 
     // Check cache — Rc::clone is a cheap pointer bump.
-    {
-        let cache = app.detail.cache.borrow();
-        if let Some(ref entry) = *cache {
-            if entry.task_id == task.id as u32
-                && entry.updated_epoch == updated_epoch
-                && entry.body == task.body
-                && entry.width == width
-                && entry.theme == app.theme_kind
-                && entry.brightness_q == bq
-                && entry.saturation_q == sq
-                && entry.fold_level == app.fold_level()
-            {
-                return app::DetailContent {
-                    lines: std::rc::Rc::clone(&entry.lines),
-                    vrow_offsets: std::rc::Rc::clone(&entry.vrow_offsets),
-                };
-            }
+    if let Some(ref entry) = app.detail.cache {
+        if entry.task_id == task.id as u32
+            && entry.updated_epoch == updated_epoch
+            && entry.body == task.body
+            && entry.width == width
+            && entry.theme == app.theme_kind
+            && entry.brightness_q == bq
+            && entry.saturation_q == sq
+            && entry.fold_level == app.fold_level()
+        {
+            return app::DetailContent {
+                lines: std::rc::Rc::clone(&entry.lines),
+                vrow_offsets: std::rc::Rc::clone(&entry.vrow_offsets),
+            };
         }
     }
 
@@ -520,14 +517,14 @@ pub(crate) fn build_detail_lines(app: &App, task: &Task, width: u16) -> app::Det
     for line in &lines {
         cumulative += Paragraph::new(vec![line.clone()])
             .wrap(Wrap { trim: false })
-            .line_count(w);
+            .line_count(w); // requires ratatui "unstable-rendered-line-info" feature
         offsets.push(cumulative);
     }
     let rc_lines = std::rc::Rc::new(lines);
     let rc_offsets = std::rc::Rc::new(offsets);
 
     // Store in cache and return (Rc clones are cheap pointer bumps).
-    *app.detail.cache.borrow_mut() = Some(app::DetailLinesCache {
+    app.detail.cache = Some(app::DetailLinesCache {
         task_id: task.id as u32,
         updated_epoch,
         body: task.body.clone(),

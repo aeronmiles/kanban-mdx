@@ -69,9 +69,7 @@ pub struct StatusSummary {
     pub wip_limit: i32,
 }
 
-fn is_zero(v: &i32) -> bool {
-    *v == 0
-}
+use crate::util::serde_helpers::is_zero;
 
 /// A single group in a grouped view.
 #[derive(Debug, Clone, Serialize)]

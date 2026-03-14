@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::tui::app::{App, AppView};
+use crate::tui::app::{delete_word_back, App, AppView};
 
 impl App {
     // ── Help View ───────────────────────────────────────────────────
@@ -18,7 +18,13 @@ impl App {
                     self.help_filter_active = false;
                 }
                 KeyCode::Backspace => {
-                    self.help_filter.pop();
+                    if key.modifiers.contains(KeyModifiers::SUPER) {
+                        self.help_filter.clear();
+                    } else if key.modifiers.contains(KeyModifiers::ALT) {
+                        delete_word_back(&mut self.help_filter);
+                    } else {
+                        self.help_filter.pop();
+                    }
                     self.help_scroll = 0;
                 }
                 KeyCode::Char(c) => {

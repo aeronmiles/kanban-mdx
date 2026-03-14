@@ -6,7 +6,7 @@ use std::io::Write;
 
 use crate::model::task::Task;
 
-use super::table::format_duration;
+use super::formatters::{self, format_duration};
 use super::types::{GroupedSummary, LogEntry, Metrics, Overview};
 
 // ---------------------------------------------------------------------------
@@ -190,17 +190,11 @@ fn format_task_line(t: &Task) -> String {
 }
 
 fn compact_duration(h: Option<f64>) -> String {
-    match h {
-        Some(hours) => format_duration(chrono::Duration::seconds((hours * 3600.0) as i64)),
-        None => "--".to_string(),
-    }
+    formatters::format_optional_hours(h, "--")
 }
 
 fn format_optional_percent(f: Option<f64>) -> String {
-    match f {
-        Some(val) => format!("{:.1}%", val * 100.0),
-        None => "--".to_string(),
-    }
+    formatters::format_optional_percent(f, "--")
 }
 
 #[cfg(test)]

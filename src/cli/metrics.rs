@@ -23,9 +23,7 @@ pub fn run(cli: &Cli, args: MetricsArgs) -> Result<(), CliError> {
         .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
 
     let since = if let Some(ref s) = args.since {
-        let date = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| {
-            CliError::newf(ErrorCode::InvalidDate, format!("invalid date: {s}"))
-        })?;
+        let date = super::helpers::parse_date(s)?;
         Some(date.and_hms_opt(0, 0, 0).unwrap().and_utc())
     } else {
         None

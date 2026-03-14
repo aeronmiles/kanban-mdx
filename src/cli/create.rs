@@ -68,10 +68,7 @@ pub fn run(cli: &Cli, args: CreateArgs) -> Result<(), CliError> {
 
     // Parse due date.
     let due = if let Some(ref d) = args.due {
-        let date = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| {
-            CliError::newf(ErrorCode::InvalidDate, format!("invalid date: {d}"))
-        })?;
-        Some(date)
+        Some(super::helpers::parse_date(d)?)
     } else {
         None
     };

@@ -1,4 +1,5 @@
 pub mod compact;
+pub mod formatters;
 pub mod json;
 pub mod table;
 pub mod types;

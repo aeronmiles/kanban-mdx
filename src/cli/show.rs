@@ -66,14 +66,9 @@ pub fn run(cli: &Cli, args: ShowArgs) -> Result<(), CliError> {
     let format = crate::cli::root::output_format(cli);
     let cfg = crate::cli::root::load_config(cli)?;
 
-    let id: i32 = args.id.trim_start_matches('#').parse().map_err(|_| {
-        CliError::newf(ErrorCode::InvalidTaskId, format!("invalid task ID: {}", args.id))
-    })?;
+    let id = super::helpers::parse_task_id(&args.id)?;
 
-    let file_path = task::find_by_id(&cfg.tasks_path(), id)
-        .map_err(|e| CliError::newf(ErrorCode::TaskNotFound, format!("{e}")))?;
-    let mut t = task::read(&file_path)
-        .map_err(|e| CliError::newf(ErrorCode::InternalError, format!("{e}")))?;
+    let (_file_path, mut t) = super::helpers::load_task(&cfg, id)?;
 
     if args.no_body {
         t.body.clear();
@@ -297,6 +292,17 @@ fn write_children_compact(w: &mut impl Write, counts: &BTreeMap<String, usize>) 
 }
 
 /// Writes children summary in table format.
+#[cfg(test)]
+fn write_prompt_to_buf(
+    t: &task::Task,
+    fields: Option<&[String]>,
+    children: Option<&BTreeMap<String, usize>>,
+) -> String {
+    let mut buf = Vec::new();
+    write_prompt(&mut buf, t, fields, children);
+    String::from_utf8(buf).unwrap()
+}
+
 fn write_children_table(w: &mut impl Write, counts: &BTreeMap<String, usize>) {
     let total: usize = counts.values().sum();
     let _ = writeln!(w);
@@ -307,5 +313,105 @@ fn write_children_table(w: &mut impl Write, counts: &BTreeMap<String, usize>) {
     }
     for (status, count) in counts {
         let _ = writeln!(w, "  {status:<16} {count}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::task::Task;
+
+    fn sample() -> Task {
+        Task {
+            id: 1,
+            title: "Test".to_string(),
+            status: "todo".to_string(),
+            priority: "high".to_string(),
+            tags: vec!["a".to_string(), "b".to_string()],
+            body: "line1\nline2".to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn prompt_outputs_all_fields() {
+        let out = write_prompt_to_buf(&sample(), None, None);
+        assert!(out.contains("id: 1"));
+        assert!(out.contains("title: Test"));
+        assert!(out.contains("status: todo"));
+        assert!(out.contains("priority: high"));
+        assert!(out.contains("tags: a,b"));
+        assert!(out.contains("body:"));
+        assert!(out.contains("  line1"));
+    }
+
+    #[test]
+    fn prompt_field_selection() {
+        let fields = vec!["id".to_string(), "title".to_string()];
+        let out = write_prompt_to_buf(&sample(), Some(&fields), None);
+        assert!(out.contains("id: 1"));
+        assert!(out.contains("title: Test"));
+        assert!(!out.contains("status:"));
+        assert!(!out.contains("body:"));
+    }
+
+    #[test]
+    fn prompt_children_summary() {
+        let mut counts = BTreeMap::new();
+        counts.insert("done".to_string(), 3);
+        counts.insert("todo".to_string(), 2);
+        let out = write_prompt_to_buf(&sample(), None, Some(&counts));
+        assert!(out.contains("children: 5 (done=3, todo=2)"));
+    }
+
+    #[test]
+    fn prompt_empty_fields_omitted() {
+        let t = Task {
+            id: 1,
+            title: "X".to_string(),
+            status: "todo".to_string(),
+            priority: "low".to_string(),
+            ..Default::default()
+        };
+        let out = write_prompt_to_buf(&t, None, None);
+        assert!(!out.contains("assignee:"));
+        assert!(!out.contains("tags:"));
+        assert!(!out.contains("body:"));
+    }
+
+    #[test]
+    fn children_compact_empty() {
+        let mut buf = Vec::new();
+        let counts = BTreeMap::new();
+        write_children_compact(&mut buf, &counts);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("children: 0"));
+    }
+
+    #[test]
+    fn children_compact_with_counts() {
+        let mut buf = Vec::new();
+        let mut counts = BTreeMap::new();
+        counts.insert("done".to_string(), 2);
+        write_children_compact(&mut buf, &counts);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("children: 2 (done=2)"));
+    }
+
+    #[test]
+    fn children_table_empty() {
+        let mut buf = Vec::new();
+        let counts = BTreeMap::new();
+        write_children_table(&mut buf, &counts);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("No children found"));
+    }
+
+    #[test]
+    fn valid_fields_list_complete() {
+        assert!(VALID_FIELDS.contains(&"id"));
+        assert!(VALID_FIELDS.contains(&"body"));
+        assert!(VALID_FIELDS.contains(&"branch"));
+        assert!(!VALID_FIELDS.contains(&"nonexistent"));
     }
 }

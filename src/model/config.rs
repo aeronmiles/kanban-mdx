@@ -592,9 +592,7 @@ pub struct TuiConfig {
     pub saturation: f32,
 }
 
-fn is_zero_f32(v: &f32) -> bool {
-    *v == 0.0
-}
+use crate::util::serde_helpers::is_false as is_false_bool;
 
 fn default_saturation() -> f32 {
     -0.2
@@ -745,13 +743,9 @@ impl Default for SemanticSearchConfig {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-fn is_zero(v: &i32) -> bool {
-    *v == 0
-}
+use crate::util::serde_helpers::is_zero;
+use crate::util::serde_helpers::is_zero_f32;
 
-fn is_false_bool(v: &bool) -> bool {
-    !v
-}
 
 fn has_duplicates(slice: &[String]) -> bool {
     let mut seen = std::collections::HashSet::new();
