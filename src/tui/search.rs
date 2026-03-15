@@ -6,6 +6,7 @@
 //! - **Time filters**: `@48h`, `@>2w`, `@today`, `created:3d`, `created:>1w`,
 //!   `updated:12h`
 //! - **Priority filters**: `p:high`, `p:medium+`, `p:high-`, `p:c` (prefix)
+//! - **Flag filters**: `@blocked` — show only blocked tasks
 //! - **Free text**: anything else is substring-matched against title, body,
 //!   tags, and `#id`
 //! - **Semantic search**: `~query` triggers embedding-based search. Can be
@@ -47,6 +48,8 @@ pub struct SearchFilter {
     pub time_filters: Vec<TimeFilter>,
     /// Priority filters — AND-matched
     pub priority_filters: Vec<PriorityFilter>,
+    /// When true, only show blocked tasks
+    pub blocked_only: bool,
     /// Free-form substring (AND with everything else)
     pub text: String,
     /// Semantic query text extracted after `~` delimiter
@@ -75,7 +78,9 @@ impl SearchFilter {
         let mut text_parts: Vec<&str> = Vec::new();
 
         for token in dsl_part.split_whitespace() {
-            if let Some(ids) = try_parse_id_token(token) {
+            if token.eq_ignore_ascii_case("@blocked") {
+                filter.blocked_only = true;
+            } else if let Some(ids) = try_parse_id_token(token) {
                 filter.ids.extend(ids);
             } else if let Some(tf) = try_parse_time_token(token) {
                 filter.time_filters.push(tf);
@@ -146,6 +151,11 @@ impl SearchFilter {
                     }
                 }
             }
+        }
+
+        // Blocked filter.
+        if self.blocked_only && !task.blocked {
+            return false;
         }
 
         // Text filter (substring).
@@ -561,6 +571,47 @@ mod tests {
         assert!(try_parse_priority_token("hello").is_none());
         assert!(try_parse_priority_token("p:").is_none());
         assert!(try_parse_priority_token("p:xyz").is_none());
+    }
+
+    // ── Blocked flag parsing ───────────────────────────────────────
+
+    #[test]
+    fn test_parse_blocked_flag() {
+        let f = SearchFilter::parse("@blocked");
+        assert!(f.blocked_only);
+        assert!(f.text.is_empty());
+        assert!(f.time_filters.is_empty());
+    }
+
+    #[test]
+    fn test_parse_blocked_case_insensitive() {
+        let f = SearchFilter::parse("@Blocked");
+        assert!(f.blocked_only);
+    }
+
+    #[test]
+    fn test_parse_blocked_combined() {
+        let f = SearchFilter::parse("@blocked p:high");
+        assert!(f.blocked_only);
+        assert_eq!(f.priority_filters.len(), 1);
+    }
+
+    #[test]
+    fn test_matches_blocked_filter() {
+        let f = SearchFilter::parse("@blocked");
+        let mut blocked = make_task(1, "high", "A", 0, 48);
+        blocked.blocked = true;
+        let unblocked = make_task(2, "high", "B", 0, 48);
+        assert!(f.matches(&blocked, "updated"));
+        assert!(!f.matches(&unblocked, "updated"));
+    }
+
+    #[test]
+    fn test_no_blocked_flag_matches_all() {
+        let f = SearchFilter::parse("");
+        let mut blocked = make_task(1, "high", "A", 0, 48);
+        blocked.blocked = true;
+        assert!(f.matches(&blocked, "updated"));
     }
 
     // ── Full filter parsing ─────────────────────────────────────────

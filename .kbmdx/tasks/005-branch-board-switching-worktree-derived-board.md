@@ -3,12 +3,12 @@ id: 5
 title: 'Branch board switching: worktree-derived board views'
 status: done
 priority: medium
-created: 2026-03-10T11:08:13.060367Z
-updated: 2026-03-12T17:32:29.714530Z
+created: '2026-03-10T11:08:13.060367Z'
+updated: '2026-03-14T17:39:33.436750Z'
 tags:
 - layer-3
 class: standard
-branch: dev
+branch: master
 ---
 
 ## Summary

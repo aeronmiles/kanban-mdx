@@ -79,6 +79,9 @@ pub enum AppView {
     BranchPicker,
     ContextPicker,
     ConfirmBranch,
+    Guide,
+    FilePicker,
+    BlockReason,
 }
 
 // ── Context picker types ─────────────────────────────────────────────
@@ -241,6 +244,17 @@ pub struct InputHistory {
 }
 
 impl InputHistory {
+    /// Create an ephemeral in-memory history (no file persistence).
+    pub fn new_ephemeral() -> Self {
+        Self {
+            entries: Vec::new(),
+            cursor: None,
+            draft: String::new(),
+            max_entries: HISTORY_MAX_ENTRIES,
+            path: None,
+        }
+    }
+
     /// Create a persistent history backed by a file. Loads existing entries
     /// from disk (silently ignores missing/unreadable files).
     pub fn with_path(path: std::path::PathBuf) -> Self {
@@ -594,6 +608,77 @@ pub struct DebugState {
     pub fps_last_frame: Instant,
     pub perf_mode: bool,
     pub needs_redraw: bool,
+}
+
+// ── Guide state ──────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuideMode {
+    Index, // browsing the filterable topic list
+    Page,  // reading a rendered topic
+}
+
+/// State for the in-TUI guide / documentation viewer.
+pub struct GuideState {
+    pub mode: GuideMode,
+    pub topic_cursor: usize,
+    pub topic_filter: String,
+    pub topic_filter_active: bool,
+    pub scroll: usize,
+    pub cache: Option<GuideContentCache>,
+    pub fold_level: usize,
+    pub find_query: String,
+    pub find_active: bool,
+    pub find_matches: Vec<usize>,
+    pub find_current: usize,
+}
+
+/// Cached rendered guide page (keyed on topic index + display params).
+pub struct GuideContentCache {
+    pub topic_index: usize,
+    pub width: u16,
+    pub theme: ThemeKind,
+    pub brightness_q: i32,
+    pub saturation_q: i32,
+    pub fold_level: usize,
+    pub content: DetailContent,
+    /// Heading visual-row offsets (any level, collapsed).
+    pub heading_offsets_any: Vec<usize>,
+    /// Heading visual-row offsets (## level only).
+    pub heading_offsets_l2: Vec<usize>,
+    /// Plain text per rendered line (for find matching).
+    pub line_texts: Vec<String>,
+}
+
+// ── File view types ──────────────────────────────────────────────────
+
+/// Loaded markdown file for the reader view.
+pub struct FileView {
+    pub path: String,      // absolute path
+    pub title: String,     // filename for header display
+    pub body: String,      // raw markdown content
+    pub standalone: bool,  // true = CLI `read` (q quits), false = TUI picker (q returns to board)
+}
+
+/// File picker state for browsing directories.
+pub struct FilePickerState {
+    pub cwd: std::path::PathBuf,
+    pub entries: Vec<FilePickerEntry>,
+    pub cursor: usize,
+    pub filter: String,
+    pub path_input_active: bool,
+    pub path_input: String,
+    pub tab_completions: Vec<String>,
+    pub tab_idx: usize,
+    pub tab_prefix: Option<String>,
+    /// View to return to when the picker is dismissed.
+    pub return_view: AppView,
+}
+
+pub struct FilePickerEntry {
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub is_dir: bool,
 }
 
 // ── Render caches ────────────────────────────────────────────────────

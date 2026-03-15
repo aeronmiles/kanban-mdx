@@ -3,14 +3,14 @@ id: 56
 title: 'CLI: Wire up board --group-by flag'
 status: done
 priority: critical
-created: 2026-03-11T09:51:48.507597Z
-updated: 2026-03-12T19:23:30.998888Z
-started: 2026-03-12T19:23:30.998888Z
-completed: 2026-03-12T19:23:30.998888Z
+created: '2026-03-11T09:51:48.507597Z'
+updated: '2026-03-14T17:40:07.108459Z'
+started: '2026-03-12T19:23:30.998888Z'
+completed: '2026-03-12T19:23:30.998888Z'
 tags:
-    - kanban-mdx
+- kanban-mdx
 class: standard
-branch: main
+branch: master
 ---
 
 In kanban-mdx, the `board` command defines a `--group-by` flag in `BoardArgs` (src/cli/board.rs line 20), but the implementation never uses it. The `render_board()` function always groups by status.

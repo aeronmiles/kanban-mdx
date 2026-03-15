@@ -1,5 +1,4 @@
 voyage
-worktree
 Implement
 q
 next
@@ -15,10 +14,13 @@ app
 struct
 ~workflow
 TUI work
-tui
 tui work
 tui wo
 tui w
 error
 migrat
 auto
+tui
+worktree
+mcp
+hydrate

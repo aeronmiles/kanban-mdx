@@ -2,6 +2,8 @@ mod board;
 mod create;
 mod detail;
 mod dialogs;
+mod file_picker;
+mod guide;
 mod overlays;
 mod pickers;
 mod search;

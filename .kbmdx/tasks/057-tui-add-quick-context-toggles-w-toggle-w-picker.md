@@ -3,14 +3,14 @@ id: 57
 title: 'TUI: Add quick context toggles (w=toggle, W=picker)'
 status: done
 priority: critical
-created: 2026-03-11T09:51:48.829494Z
-updated: 2026-03-11T19:01:18.702826Z
-started: 2026-03-11T18:45:28.087572Z
-completed: 2026-03-11T18:45:28.087572Z
+created: '2026-03-11T09:51:48.829494Z'
+updated: '2026-03-14T17:47:42.564258Z'
+started: '2026-03-11T18:45:28.087572Z'
+completed: '2026-03-11T18:45:28.087572Z'
 tags:
 - kanban-mdx
 class: standard
-branch: main
+branch: master
 ---
 
 In Go kanban-mdx, the TUI has 4 context/branch keybindings with distinct behaviors:

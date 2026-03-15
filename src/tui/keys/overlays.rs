@@ -1,5 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use chrono::Utc;
+
 use crate::tui::app::{delete_word_back, App, AppView};
 
 impl App {
@@ -73,6 +75,12 @@ impl App {
             KeyCode::Char('G') | KeyCode::End => {
                 self.help_scroll = usize::MAX / 2;
             }
+            KeyCode::Char('O') => {
+                self.help_filter.clear();
+                self.help_filter_active = false;
+                self.help_scroll = 0;
+                self.open_file_picker();
+            }
             KeyCode::Char(c @ '1'..='9') => {
                 let target = (c as usize) - ('1' as usize);
                 self.help_filter.clear();
@@ -104,6 +112,10 @@ impl App {
             KeyCode::Char('G') | KeyCode::End => {
                 self.search_help_scroll = usize::MAX / 2;
             }
+            KeyCode::Char('O') => {
+                self.search_help_scroll = 0;
+                self.open_file_picker();
+            }
             _ => {}
         }
     }
@@ -131,9 +143,71 @@ impl App {
             KeyCode::Char('G') | KeyCode::End => {
                 self.debug.scroll = usize::MAX / 2;
             }
+            KeyCode::Char('O') => {
+                self.open_file_picker();
+            }
             KeyCode::Char(c @ '1'..='9') => {
                 let target = (c as usize) - ('1' as usize);
                 self.focus_column_and_return(target);
+            }
+            _ => {}
+        }
+    }
+
+    // ── Block Reason overlay ────────────────────────────────────────
+
+    pub(crate) fn handle_block_reason_key(&mut self, key: KeyEvent) {
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            match key.code {
+                KeyCode::Char('w') => {
+                    delete_word_back(&mut self.block_reason_input);
+                }
+                KeyCode::Char('u') => {
+                    self.block_reason_input.clear();
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        match key.code {
+            KeyCode::Enter => {
+                let reason = self.block_reason_input.trim().to_string();
+                let col = self.active_col;
+                let row = self.active_row;
+                let mut id = 0;
+                if let Some(t) = self.columns.get_mut(col).and_then(|c| c.tasks.get_mut(row)) {
+                    t.blocked = true;
+                    t.block_reason = reason.clone();
+                    t.updated = Utc::now();
+                    id = t.id;
+                }
+                self.persist_task(col, row);
+                if self.block_return_view == AppView::Detail {
+                    self.detail.cache = None;
+                }
+                let msg = if reason.is_empty() {
+                    format!("Blocked #{}", id)
+                } else {
+                    format!("Blocked #{}: {}", id, reason)
+                };
+                self.set_status(msg);
+                self.view = self.block_return_view;
+            }
+            KeyCode::Esc => {
+                self.view = self.block_return_view;
+            }
+            KeyCode::Backspace => {
+                if key.modifiers.contains(KeyModifiers::SUPER) {
+                    self.block_reason_input.clear();
+                } else if key.modifiers.contains(KeyModifiers::ALT) {
+                    delete_word_back(&mut self.block_reason_input);
+                } else {
+                    self.block_reason_input.pop();
+                }
+            }
+            KeyCode::Char(c) => {
+                self.block_reason_input.push(c);
             }
             _ => {}
         }

@@ -561,7 +561,7 @@ peel them off one at a time with `Esc`.
 | `R`             | Toggle reader panel                       |
 | `<`/`>`         | Narrow/widen reader panel                 |
 | `z`/`Z`         | Fold deeper/shallower (headings)          |
-| `(`/`)`         | Previous/next heading (any level)         |
+| `'`/`"`         | Next/previous `##` heading               |
 | `'`/`"`         | Next/previous `##` heading               |
 | `Alt+[`/`]`    | Previous/next `##` heading               |
 
@@ -598,8 +598,8 @@ rendered markdown.
 | `Ctrl+j`/`k`   | Full page down/up                         |
 | `g`/`Home`      | Jump to top                               |
 | `G`/`End`       | Jump to bottom                            |
-| `)`/`}`         | Next heading (any level)                  |
-| `(`/`{`         | Previous heading (any level)              |
+| `}`              | Next heading (any level)                  |
+| `{`              | Previous heading (any level)              |
 | `'`/`"`         | Next/previous `##` heading               |
 | `1`-`9`         | Jump to Nth heading                       |
 | `/` or `Ctrl+f` | Find in document                          |

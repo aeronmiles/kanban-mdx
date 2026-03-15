@@ -299,18 +299,8 @@ impl App {
             KeyCode::Char('&') => self.toggle_collapse_idx(6),
             KeyCode::Char('*') => self.toggle_collapse_idx(7),
             KeyCode::Char('(') => {
-                // Shift+9: reader prev heading or toggle column 9.
-                if self.reader_open {
-                    self.reader_prev_heading();
-                } else {
-                    self.toggle_collapse_idx(8);
-                }
-            }
-            KeyCode::Char(')') => {
-                // Shift+0: reader next heading.
-                if self.reader_open {
-                    self.reader_next_heading();
-                }
+                // Shift+9: toggle column 9.
+                self.toggle_collapse_idx(8);
             }
             KeyCode::Char('\'') => {
                 // Next ## heading in reader (level 2).
@@ -407,6 +397,9 @@ impl App {
             KeyCode::Char('?') => {
                 self.view = AppView::Help;
             }
+            KeyCode::Char('H') => {
+                self.open_guide();
+            }
             KeyCode::Char('u') => {
                 // Undo (same as Ctrl+Z).
                 match crate::board::undo::pop_undo(self.cfg.dir()) {
@@ -494,6 +487,47 @@ impl App {
                 };
                 self.set_status(label.to_string());
             }
+            KeyCode::Char('B') => {
+                if let Some(task) = self.active_task() {
+                    if task.blocked {
+                        // Unblock immediately.
+                        let id = task.id;
+                        let col = self.active_col;
+                        let row = self.active_row;
+                        if let Some(t) = self.columns.get_mut(col).and_then(|c| c.tasks.get_mut(row)) {
+                            t.blocked = false;
+                            t.block_reason.clear();
+                            t.updated = Utc::now();
+                        }
+                        self.persist_task(col, row);
+                        self.set_status(format!("Unblocked #{}", id));
+                    } else {
+                        // Open block-reason overlay.
+                        self.block_reason_input.clear();
+                        self.block_return_view = AppView::Board;
+                        self.view = AppView::BlockReason;
+                    }
+                } else {
+                    // No active task — toggle @blocked search filter.
+                    if self.search.query.contains("@blocked") {
+                        let new_query = self
+                            .search
+                            .query
+                            .replace("@blocked", "")
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        self.search.query = new_query;
+                        self.set_status("Blocked filter: OFF".to_string());
+                    } else if self.search.query.is_empty() {
+                        self.search.query = "@blocked".to_string();
+                        self.set_status("Blocked filter: ON".to_string());
+                    } else {
+                        self.search.query = format!("@blocked {}", self.search.query);
+                        self.set_status("Blocked filter: ON".to_string());
+                    }
+                }
+            }
             KeyCode::Char('C') => {
                 // Open context picker (all branches).
                 self.open_context_picker(false);
@@ -507,6 +541,9 @@ impl App {
             }
             KeyCode::Char('R') => {
                 self.toggle_reader();
+            }
+            KeyCode::Char('O') => {
+                self.open_file_picker();
             }
             KeyCode::Char('q') | KeyCode::Esc => {
                 if self.select_mode && key.code == KeyCode::Esc {

@@ -3,14 +3,14 @@ id: 55
 title: 'TUI: Add C key for instant branch context toggle'
 status: done
 priority: critical
-created: 2026-03-11T09:51:48.173743Z
-updated: 2026-03-12T17:05:01.87092Z
-started: 2026-03-12T17:04:47.186446Z
-completed: 2026-03-12T17:04:47.186446Z
+created: '2026-03-11T09:51:48.173743Z'
+updated: '2026-03-14T17:47:34.491235Z'
+started: '2026-03-12T17:04:47.186446Z'
+completed: '2026-03-12T17:04:47.186446Z'
 tags:
-    - kanban-mdx
+- kanban-mdx
 class: standard
-branch: main
+branch: master
 ---
 
 In Go kanban-mdx, pressing `C` in the TUI instantly scopes the board to tasks related to the current git branch/worktree — no picker needed. This is a quick toggle: press once to filter, press again to clear.

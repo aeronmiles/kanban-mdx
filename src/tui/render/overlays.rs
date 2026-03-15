@@ -43,7 +43,7 @@ pub(super) fn render_help(app: &App, frame: &mut Frame) {
         ("s/S", "Cycle sort mode", "z/Z", "Fold deeper/shallower"),
         ("t", "Cycle theme", "</>", "Narrow/widen panel"),
         (",/.", "Brightness -/+", "'/\"", "Next/prev ## heading"),
-        ("M-,/M-.", "Saturation -/+", "(/)", "Next/prev heading"),
+        ("M-,/M-.", "Saturation -/+", "", ""),
         ("T", "Reset adjustments", "", ""),
         ("a", "Cycle time mode", "", ""),
         ("x", "Collapse column", "", ""),
@@ -56,10 +56,13 @@ pub(super) fn render_help(app: &App, frame: &mut Frame) {
         ("f", "Find tasks", "u/^Z", "Undo"),
         ("^F", "Open search", "^R", "Redo"),
         ("w", "Toggle worktree filter", ":/^G", "Go to task #"),
-        ("b", "Assign branch", "^D", "Debug info"),
-        ("C", "Switch context", "?", "This help"),
-        ("W", "Context (worktree)", "q/Esc", "Quit"),
-        ("v", "Visual mode (select)", "^C", "Force quit"),
+        ("B", "Block/unblock task", "^D", "Debug info"),
+        ("@blocked", "Search: blocked only", "", ""),
+        ("b", "Assign branch", "?", "This help"),
+        ("C", "Switch context", "H", "Open guide"),
+        ("W", "Context (worktree)", "O", "Open .md file"),
+        ("v", "Visual mode (select)", "q/Esc", "Quit"),
+        ("", "", "^C", "Force quit"),
         ("", "", "", ""),
         ("Detail View", "", "", ""),
         ("j/k", "Scroll up/down", "m", "Move task"),
@@ -68,11 +71,12 @@ pub(super) fn render_help(app: &App, frame: &mut Frame) {
         ("d/u", "Half-page (vim)", "o", "Open in $EDITOR"),
         ("^J/^K", "Full page scroll", "v", "Visual mode (select)"),
         ("g/G", "Top / bottom", "t", "Cycle theme"),
-        ("({/})", "Prev/next heading", ",/.", "Brightness -/+"),
+        ("{/}", "Prev/next heading", ",/.", "Brightness -/+"),
         ("'/\"", "Next/prev ## heading", "M-,/M-.", "Saturation -/+"),
         ("1-9", "Jump to heading", "T", "Reset adjustments"),
         ("/", "Find in text", "z/Z", "Fold deeper/shallower"),
         ("n/N", "Find next/prev", "</>", "Narrow/widen width"),
+        ("", "", "O", "Open .md file"),
         ("", "", ":/^G", "Go to task #"),
         ("", "", "q/Esc", "Back to board"),
     ];
@@ -204,7 +208,7 @@ pub(super) fn render_help(app: &App, frame: &mut Frame) {
     // Footer hint.
     all_lines.push(Line::from(""));
     all_lines.push(Line::from(Span::styled(
-        "/:filter  j/k:scroll  g/G:top/bottom  ?/esc:close",
+        "/:filter  j/k:scroll  g/G:top/bottom  H:guide  ?/esc:close",
         theme::dim(),
     )));
 
@@ -340,6 +344,41 @@ pub(super) fn render_search_help(app: &App, frame: &mut Frame) {
 
     let paragraph = Paragraph::new(lines).scroll((scroll as u16, 0));
     frame.render_widget(paragraph, inner);
+}
+
+pub(super) fn render_block_reason(app: &App, frame: &mut Frame) {
+    let dialog_width: u16 = 50;
+    let dialog_height: u16 = 5;
+
+    let area = centered_fixed(dialog_width, dialog_height, frame.area());
+    frame.render_widget(Clear, area);
+
+    let block = Block::new()
+        .title(" Block Task ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::dialog_border())
+        .padding(Padding::horizontal(1));
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("Reason: ", theme::help_key()),
+            Span::styled(
+                format!("{}\u{2588}", app.block_reason_input),
+                theme::title_active(),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Enter:confirm  Esc:cancel  (reason is optional)",
+            theme::dim(),
+        )),
+    ];
+
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 pub(super) fn render_debug(app: &App, frame: &mut Frame) {

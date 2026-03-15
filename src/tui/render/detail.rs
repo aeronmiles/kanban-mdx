@@ -15,6 +15,12 @@ use crate::tui::theme;
 use super::chrome::render_suggestions;
 
 pub(super) fn render_detail(app: &mut App, frame: &mut Frame) {
+    // File-reader mode: render file content instead of task detail.
+    if app.file_view.is_some() {
+        render_file_detail(app, frame);
+        return;
+    }
+
     let task = match app.active_task() {
         Some(t) => t.clone(),
         None => {
@@ -138,6 +144,10 @@ pub(super) fn render_detail(app: &mut App, frame: &mut Frame) {
     }
 
     let content = build_detail_lines(app, &task, content_width);
+
+    // Clamp scroll to document bounds so subsequent saturating_sub works.
+    let max_scroll = content.total_vrows().saturating_sub(1);
+    app.detail.scroll = app.detail.scroll.min(max_scroll);
 
     let find_ctx = if !app.detail.find_query.is_empty() {
         Some(FindContext {
@@ -540,6 +550,284 @@ pub(crate) fn build_detail_lines(app: &mut App, task: &Task, width: u16) -> app:
     app::DetailContent {
         lines: rc_lines,
         vrow_offsets: rc_offsets,
+    }
+}
+
+/// Build content lines for a file (no metadata grid, just markdown body).
+/// Uses `task_id=0` as cache key since real task IDs start at 1.
+pub(crate) fn build_file_lines(app: &mut App, body: &str, width: u16) -> app::DetailContent {
+    let bq = (app.brightness * app::THEME_QUANTIZE) as i32;
+    let sq = (app.saturation * app::THEME_QUANTIZE) as i32;
+
+    // Check cache — task_id=0 means file mode.
+    if let Some(ref entry) = app.detail.cache {
+        if entry.task_id == 0
+            && entry.body == body
+            && entry.width == width
+            && entry.theme == app.theme_kind
+            && entry.brightness_q == bq
+            && entry.saturation_q == sq
+            && entry.fold_level == app.fold_level()
+        {
+            return app::DetailContent {
+                lines: std::rc::Rc::clone(&entry.lines),
+                vrow_offsets: std::rc::Rc::clone(&entry.vrow_offsets),
+            };
+        }
+    }
+
+    let md_opts = markdown::Options::new(app.markdown_theme())
+        .with_max_width(width as usize)
+        .with_fold_level(app.fold_level())
+        .with_adjust_color(theme::adjusted);
+    let md_text = markdown::from_str_with_options(body, &md_opts);
+    let body_fg = theme::palette_text_normal();
+
+    let mut lines: Vec<Line> = Vec::new();
+    for line in md_text.lines {
+        let line_has_fg = line.style.fg.is_some();
+        let owned_spans: Vec<Span<'static>> = line
+            .spans
+            .into_iter()
+            .map(|s| {
+                let mut style = s.style;
+                if style.fg.is_none() && !line_has_fg {
+                    style.fg = Some(body_fg);
+                }
+                Span::styled(s.content.into_owned(), style)
+            })
+            .collect();
+        lines.push(Line::from(owned_spans).style(line.style));
+    }
+
+    let w = width.max(1);
+    let mut offsets = Vec::with_capacity(lines.len() + 1);
+    offsets.push(0usize);
+    let mut cumulative = 0usize;
+    for line in &lines {
+        cumulative += Paragraph::new(vec![line.clone()])
+            .wrap(Wrap { trim: false })
+            .line_count(w);
+        offsets.push(cumulative);
+    }
+    let rc_lines = std::rc::Rc::new(lines);
+    let rc_offsets = std::rc::Rc::new(offsets);
+
+    app.detail.cache = Some(app::DetailLinesCache {
+        task_id: 0,
+        updated_epoch: 0,
+        body: body.to_string(),
+        width,
+        theme: app.theme_kind,
+        brightness_q: bq,
+        saturation_q: sq,
+        fold_level: app.fold_level(),
+        lines: std::rc::Rc::clone(&rc_lines),
+        vrow_offsets: std::rc::Rc::clone(&rc_offsets),
+    });
+
+    app::DetailContent {
+        lines: rc_lines,
+        vrow_offsets: rc_offsets,
+    }
+}
+
+/// Render a file in the detail view (standalone reader or picker-opened file).
+fn render_file_detail(app: &mut App, frame: &mut Frame) {
+    let fv_title;
+    let fv_path;
+    let fv_body;
+    let fv_standalone;
+    {
+        let fv = app.file_view.as_ref().unwrap();
+        fv_title = fv.title.clone();
+        fv_path = fv.path.clone();
+        fv_body = fv.body.clone();
+        fv_standalone = fv.standalone;
+    }
+
+    let area = frame.area();
+
+    let show_find_bar = app.detail.find_active || !app.detail.find_query.is_empty();
+    let chunks = if show_find_bar {
+        Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(area)
+    } else {
+        Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(0),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(area)
+    };
+    let header_area = chunks[0];
+    let content_area = chunks[2];
+    let find_bar_area = chunks[3];
+    let status_area = chunks[5];
+
+    let content_width = if app.reader_max_width > 0 {
+        (app.reader_max_width as u16).min(content_area.width)
+    } else {
+        content_area.width
+    };
+    let h_margin = content_area.width.saturating_sub(content_width) / 2;
+    let inner = Rect {
+        x: content_area.x + h_margin,
+        y: content_area.y,
+        width: content_width,
+        height: content_area.height,
+    };
+
+    // Header: filename + path.
+    let header_line1 = Line::from(Span::styled(fv_title.clone(), theme::title_active()));
+    let header_line2 = Line::from(Span::styled(fv_path.clone(), theme::dim()));
+    let header_text = vec![header_line1.clone(), header_line2.clone()];
+    let header_max_w = (header_line1.width().max(header_line2.width())) as u16;
+
+    if content_width >= header_max_w {
+        let ha = Rect {
+            x: header_area.x + h_margin,
+            y: header_area.y,
+            width: content_width,
+            height: header_area.height,
+        };
+        frame.render_widget(Paragraph::new(header_text), ha);
+    } else {
+        frame.render_widget(
+            Paragraph::new(header_text).alignment(ratatui::layout::Alignment::Center),
+            header_area,
+        );
+    }
+
+    let content = build_file_lines(app, &fv_body, content_width);
+
+    // Clamp scroll to document bounds so subsequent saturating_sub works.
+    let max_scroll = content.total_vrows().saturating_sub(1);
+    app.detail.scroll = app.detail.scroll.min(max_scroll);
+
+    let find_ctx = if !app.detail.find_query.is_empty() {
+        Some(FindContext {
+            query: &app.detail.find_query,
+            matches: &app.detail.find_matches,
+            current: app.detail.find_current,
+        })
+    } else {
+        None
+    };
+
+    render_scrolled_content(&content, app.detail.scroll, inner, frame, find_ctx);
+
+    // Find bar.
+    if show_find_bar {
+        let match_info = if app.detail.find_matches.is_empty() {
+            "No matches".to_string()
+        } else {
+            format!("{}/{}", app.detail.find_current + 1, app.detail.find_matches.len())
+        };
+
+        let find_line = if app.detail.find_active {
+            let hint = if app.detail.find_query.is_empty() { "  ?:syntax" } else { "" };
+            Line::from(vec![
+                Span::styled(" Find: ", theme::help_key()),
+                Span::styled(format!("{}\u{2588}", app.detail.find_query), theme::title_active()),
+                Span::styled(format!("  {}{}", match_info, hint), theme::dim()),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(format!(" Find: {} ", app.detail.find_query), theme::dim()),
+                Span::styled(format!(" {}  n/N:next/prev", match_info), theme::dim()),
+            ])
+        };
+
+        let find_line_width = find_line.width() as u16;
+        if content_width >= find_line_width {
+            let find_area = Rect {
+                x: find_bar_area.x + h_margin,
+                y: find_bar_area.y,
+                width: content_width,
+                height: find_bar_area.height,
+            };
+            frame.render_widget(
+                Paragraph::new(find_line).style(theme::status_bar_style()),
+                find_area,
+            );
+        } else {
+            frame.render_widget(
+                Paragraph::new(find_line)
+                    .style(theme::status_bar_style())
+                    .alignment(ratatui::layout::Alignment::Center),
+                find_bar_area,
+            );
+        }
+
+        if app.detail.find_active {
+            let prefix = app
+                .detail.find_tab_prefix
+                .as_deref()
+                .unwrap_or(&app.detail.find_query);
+            let suggestions = app.detail.find_history.completions(prefix);
+            if !suggestions.is_empty() {
+                render_suggestions(frame, &suggestions, find_bar_area, app.detail.find_tab_idx);
+            }
+        }
+    }
+
+    // Footer: applicable keys only (no move/goto).
+    let quit_label = if fv_standalone { ":quit  " } else { ":back  " };
+    let mut hints: Vec<Span> = vec![
+        Span::styled("q/Esc", theme::help_key()),
+        Span::styled(quit_label, theme::help_desc()),
+        Span::styled("/", theme::help_key()),
+        Span::styled(":find  ", theme::help_desc()),
+        Span::styled("z/Z", theme::help_key()),
+        Span::styled(":fold", theme::help_desc()),
+    ];
+
+    if app.fold_level() > 0 {
+        hints.push(Span::styled(
+            format!(" [h{}]", app.fold_level()),
+            theme::dim(),
+        ));
+    }
+
+    hints.push(Span::styled("  ", theme::help_desc()));
+    hints.push(Span::styled(">/<", theme::help_key()));
+    hints.push(Span::styled(":width  ", theme::help_desc()));
+    hints.push(Span::styled("j/k", theme::help_key()));
+    hints.push(Span::styled(":scroll  ", theme::help_desc()));
+    hints.push(Span::styled("1-9", theme::help_key()));
+    hints.push(Span::styled(":heading  ", theme::help_desc()));
+    hints.push(Span::styled("y", theme::help_key()));
+    hints.push(Span::styled(":copy  ", theme::help_desc()));
+    hints.push(Span::styled("o", theme::help_key()));
+    hints.push(Span::styled(":open", theme::help_desc()));
+
+    let hint = Line::from(hints);
+    let hint_width: u16 = hint.width() as u16;
+
+    if content_width >= hint_width {
+        let footer_area = Rect {
+            x: status_area.x + h_margin,
+            y: status_area.y,
+            width: content_width,
+            height: status_area.height,
+        };
+        frame.render_widget(Paragraph::new(hint), footer_area);
+    } else {
+        frame.render_widget(
+            Paragraph::new(hint).alignment(ratatui::layout::Alignment::Center),
+            status_area,
+        );
     }
 }
 

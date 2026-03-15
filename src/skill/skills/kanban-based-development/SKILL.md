@@ -10,9 +10,6 @@ allowed-tools:
   - Bash(kbmdx *)
   - Bash(kbmd *)
   - Bash(git *)
-  - Bash(go *)
-  - Bash(golangci-lint *)
-  - Bash(awk *)
 ---
 
 # Kanban-Based Development
@@ -119,6 +116,8 @@ After picking, read the full task:
 kbmdx show <ID>
 ```
 
+To see only tasks associated with your current worktree: `kbmdx list --compact -C`.
+
 ### 2) Create a worktree (default)
 
 Create a worktree for the task branch from board home:
@@ -128,6 +127,13 @@ git worktree add ../kbmdx-task-<ID> -b task/<ID>-<kebab-description>
 cd ../kbmdx-task-<ID>
 ```
 
+Record the branch and worktree on the task so other agents (and `kbmdx worktrees --check`)
+can track them:
+
+```bash
+kbmdx edit <ID> --branch task/<ID>-<kebab-description> --worktree ../kbmdx-task-<ID> --claim <agent>
+```
+
 Skip a worktree only for truly non-conflicting work (e.g., board-only changes or writing an untracked research report). If you touch tracked code/config, use a worktree.
 
 ### 3) Implement, test, commit (in the worktree)
@@ -135,9 +141,7 @@ Skip a worktree only for truly non-conflicting work (e.g., board-only changes or
 Implement the smallest change that satisfies the task.
 
 - Bugs: write a failing test first (TDD), then fix.
-- Run the appropriate checks for the change (common defaults):
-  - `go test ./...`
-  - `golangci-lint run ./...`
+- Run the appropriate checks for the change (tests, linter, type-checker — whatever the project uses).
 
 Commit in the worktree when green:
 
@@ -172,8 +176,7 @@ Merge and re-run tests on main:
 
 ```bash
 git merge task/<ID>-<kebab-description>
-go test ./...
-golangci-lint run ./...
+# Re-run project tests/linter here
 ```
 
 If you cannot merge right now (e.g., another merge/rebase is in progress), do **not** force. Park the task in `review`, leave a note (branch name + what’s left), and pick the next task.
@@ -209,9 +212,12 @@ git commit -m "chore(board): update task #<ID>"
 ### 7) Optional cleanup
 
 ```bash
+kbmdx edit <ID> --clear-branch --clear-worktree
 git worktree remove --force ../kbmdx-task-<ID>
 git branch -d task/<ID>-<kebab-description>
 ```
+
+To audit all worktrees for stale metadata: `kbmdx worktrees --check`.
 
 ## Blocked / Needs User Input (the “review and move on” rule)
 

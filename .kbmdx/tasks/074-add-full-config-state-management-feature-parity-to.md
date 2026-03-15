@@ -3,14 +3,14 @@ id: 74
 title: Add full config state management feature parity to kanban-mdx
 status: done
 priority: high
-created: 2026-03-12T17:51:49.342824Z
-updated: 2026-03-12T19:00:27.666919Z
-started: 2026-03-12T19:00:27.666919Z
-completed: 2026-03-12T19:00:27.666919Z
+created: '2026-03-12T17:51:49.342824Z'
+updated: '2026-03-14T17:40:23.754392Z'
+started: '2026-03-12T19:00:27.666919Z'
+completed: '2026-03-12T19:00:27.666919Z'
 tags:
-    - layer-4
+- layer-4
 class: standard
-branch: main
+branch: master
 ---
 
 Bring kanban-mdx (Rust) to full feature parity with kanban-mdx (Go) for all config state management features. This covers the complete config lifecycle: schema, migrations, validation, CLI commands, enforcement logic, and TUI state persistence.

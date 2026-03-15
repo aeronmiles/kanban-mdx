@@ -49,7 +49,15 @@ Each task is a `.md` file in `.kbmdx/tasks/`. The CLI is `kbmdx`
 | List blocked tasks                      | `kbmdx list --compact --blocked`                             |
 | List ready-to-start tasks               | `kbmdx list --compact --not-blocked --status todo`           |
 | List tasks with resolved deps           | `kbmdx list --compact --unblocked`                           |
+| Search tasks (semantic)                 | `kbmdx find "QUERY"`                                         |
+| Search tasks (substring)                | `kbmdx list --compact --search "keyword"`                    |
 | Find a specific task                    | `kbmdx show ID`                                              |
+| Show task dependencies                  | `kbmdx deps ID`                                              |
+| List tasks by class of service          | `kbmdx list --compact --class expedite`                      |
+| List claimed tasks                      | `kbmdx list --compact --claimed <agent>`                     |
+| List unclaimed tasks                    | `kbmdx list --compact --unclaimed`                           |
+| Group tasks by field                    | `kbmdx list --compact --group-by assignee`                   |
+| Filter to current worktree              | `kbmdx list --compact -C`                                    |
 | Claim next available task               | `kbmdx pick --claim <agent> --status todo --move in-progress`|
 | Create a task                           | `kbmdx create "TITLE" --priority P --tags T`                 |
 | Create a task with body                 | `kbmdx create "TITLE" --body "DESC"`                         |
@@ -68,6 +76,12 @@ Each task is a `.md` file in `.kbmdx/tasks/`. The CLI is `kbmdx`
 | Append a note to task body              | `kbmdx edit ID --append-body "note" --timestamp`             |
 | Hand off a task to review               | `kbmdx handoff ID --claim <agent> --note "…" --release`      |
 | Delete a task                           | `kbmdx delete ID --yes`                                      |
+| Archive completed tasks                 | `kbmdx archive ID`                                           |
+| Undo last action                        | `kbmdx undo`                                                 |
+| Redo last undo                          | `kbmdx redo`                                                 |
+| Import tasks from file                  | `kbmdx import FILE`                                          |
+| Check worktree status                   | `kbmdx worktrees --check`                                    |
+| Get/set board config                    | `kbmdx config get KEY` / `kbmdx config set KEY VALUE`        |
 | See flow metrics                        | `kbmdx metrics --compact`                                    |
 | See activity log                        | `kbmdx log --compact --limit 20`                             |
 | See recent activity for a task          | `kbmdx log --compact --task ID`                              |
@@ -80,19 +94,25 @@ Each task is a `.md` file in `.kbmdx/tasks/`. The CLI is `kbmdx`
 
 ```bash
 kbmdx list [--status S] [--priority P] [--assignee A] [--tag T] \
-  [--sort FIELD] [-r] [-n LIMIT] [--blocked] [--not-blocked] \
-  [--parent ID] [--unblocked]
+  [--class C] [--claimed AGENT] [--unclaimed] [--search TEXT] \
+  [--id 1,2,3] [--parent ID] [--branch GLOB] \
+  [--blocked] [--not-blocked] [--unblocked] \
+  [--has-worktree] [--no-worktree] [--archived] \
+  [--group-by FIELD] [--sort FIELD] [--reverse] [--limit N] \
+  [--context] [--no-body]
 ```
 
-Sort fields: id, status, priority, created, updated, due. `-r` reverses.
+Alias: `ls`. Sort fields: id, status, priority, created, updated, due.
 `--unblocked` shows tasks whose dependencies are all at terminal status.
+`--context` / `-C` auto-filters to tasks matching the current worktree's branch.
+`--group-by` accepts: assignee, tag, class, priority, status.
 
 ### create
 
 ```bash
 kbmdx create "TITLE" [--status S] [--priority P] [--assignee A] \
   [--tags T1,T2] [--due YYYY-MM-DD] [--estimate E] [--body "TEXT"] \
-  [--parent ID] [--depends-on ID1,ID2] [--claim AGENT]
+  [--parent ID] [--depends-on ID1,ID2] [--class C] [--claim AGENT]
 ```
 
 Prints the created task ID and summary. `--claim` immediately claims the task for an agent,
@@ -101,11 +121,14 @@ combining creation and claiming in one step.
 ### show
 
 ```bash
-kbmdx show ID
+kbmdx show ID [--no-body] [--section NAME] [--children]
+kbmdx show ID --prompt [--fields id,title,status,body]
 kbmdx show ID --json   # only when piping to another tool
 ```
 
 Default format shows all fields including the body in a readable layout.
+`--prompt` gives a token-efficient output for LLM prompts; `--fields` selects which fields to include.
+`--children` appends a children status summary. `--section` extracts a named `##` section from the body.
 Use `--json` only when you need to parse fields programmatically.
 For the JSON schema, see [references/json-schemas.md](references/json-schemas.md).
 
@@ -122,43 +145,52 @@ Run once per agent session and remember the result.
 
 ```bash
 kbmdx edit ID[,ID,...] [--title T] [--status S] [--priority P] [--assignee A] \
-  [--add-tag T] [--remove-tag T] [--due YYYY-MM-DD] [--clear-due] \
-  [--estimate E] [--body "TEXT"] [-a "TEXT"] [--started YYYY-MM-DD] [--clear-started] \
-  [--completed YYYY-MM-DD] [--clear-completed] [--parent ID] \
-  [--clear-parent] [--add-dep ID] [--remove-dep ID] \
+  [--tags T1,T2] [--add-tag T] [--remove-tag T] \
+  [--due YYYY-MM-DD] [--clear-due] [--estimate E] \
+  [--class C] [--branch B] [--worktree W] \
+  [--clear-branch] [--clear-worktree] \
+  [--body "TEXT"] [-a "TEXT"] [-t] \
+  [--set-section NAME --section-body "TEXT"] \
+  [--started YYYY-MM-DD] [--clear-started] \
+  [--completed YYYY-MM-DD] [--clear-completed] \
+  [--parent ID] [--clear-parent] \
+  [--depend ID] [--undepend ID] \
   [--block "REASON"] [--unblock] \
-  [--claim AGENT] [--release] [-t]
+  [--claim AGENT] [--release] [--force]
 ```
 
 Only specified fields are changed. Prints a confirmation message.
+`--tags` replaces all tags; `--add-tag` / `--remove-tag` modify incrementally.
 `-a` / `--append-body` appends text to the existing body without replacing it.
 `-t` / `--timestamp` prefixes a timestamp line when appending.
+`--set-section` creates or replaces a named `##` section in the body.
+`--branch` / `--worktree` track git branch and worktree path on the task.
 `--claim` claims (or renews a claim on) the task for the agent.
 `--release` releases the claim on the task.
+`--force` overrides `require_branch` enforcement.
 Accepts comma-separated IDs for bulk edits.
 
 ### move
 
 ```bash
-kbmdx move ID[,ID,...] STATUS
+kbmdx move ID STATUS [--claim AGENT] [--force]
 kbmdx move ID --next
 kbmdx move ID --prev
-kbmdx move ID STATUS --claim AGENT
 ```
 
 Auto-sets Started on first move from initial status. Auto-sets Completed on move to terminal status.
-Accepts comma-separated IDs for bulk moves. `--claim` claims the task during the move (useful when
-resuming a parked task).
+`--claim` claims the task during the move (useful when resuming a parked task).
+`--force` overrides `require_branch` enforcement.
 
 ### pick
 
 ```bash
-kbmdx pick --claim AGENT [--status S] [--move STATUS] [--tags T1,T2]
+kbmdx pick --claim AGENT [--status S] [--move STATUS] [--tags T1,T2] [--no-body]
 ```
 
 Atomically finds the highest-priority unclaimed, unblocked task and claims it. Use `--status` to
 restrict which column to pick from. Use `--move` to simultaneously move the task to a new status.
-Replaces the slower list → claim → move sequence.
+`--no-body` suppresses body in output. Replaces the slower list → claim → move sequence.
 
 ### handoff
 
@@ -182,28 +214,30 @@ Generates a markdown board summary suitable for embedding in `CLAUDE.md` or `AGE
 ### delete
 
 ```bash
-kbmdx delete ID --yes
+kbmdx delete ID[,ID,...] --yes
 ```
 
-Always pass `--yes` (non-interactive context requires it).
+Accepts one or more IDs. Always pass `--yes` (non-interactive context requires it).
 
 ### board
 
 ```bash
-kbmdx board
+kbmdx board [--group-by FIELD] [--parent ID] [--watch]
 ```
 
-Shows board overview: task counts per status, WIP utilization,
+Alias: `summary`. Shows board overview: task counts per status, WIP utilization,
 blocked/overdue counts, priority distribution.
+`--group-by` groups by field. `--parent` scopes to a parent task's subtree.
+`--watch` / `-w` live-refreshes on file changes.
 
 ### metrics
 
 ```bash
-kbmdx metrics [--since YYYY-MM-DD]
+kbmdx metrics [--since YYYY-MM-DD] [--parent ID]
 ```
 
 Shows throughput (7d/30d), avg lead/cycle time, flow efficiency,
-aging items.
+aging items. `--parent` scopes to a parent task's subtree.
 
 ### log
 
@@ -213,6 +247,69 @@ kbmdx log [--since YYYY-MM-DD] [--limit N] [--action TYPE] \
 ```
 
 Action types: create, move, edit, delete, block, unblock.
+
+### find
+
+```bash
+kbmdx find "QUERY" [--limit N]
+```
+
+Semantic search across task titles and bodies. Returns up to N results (default 10),
+ranked by relevance.
+
+### deps
+
+```bash
+kbmdx deps ID [--upstream] [--downstream] [--transitive]
+```
+
+Shows dependency graph for a task. `--upstream` shows what blocks this task,
+`--downstream` shows what this task blocks. `--transitive` follows the full chain.
+
+### archive
+
+```bash
+kbmdx archive ID[,ID,...]
+```
+
+Archives completed tasks. Archived tasks are excluded from `list` by default
+(use `--archived` to include them).
+
+### undo / redo
+
+```bash
+kbmdx undo [--dry-run]
+kbmdx redo [--dry-run]
+```
+
+Undo/redo the last mutation. `--dry-run` shows what would change without applying it.
+
+### worktrees
+
+```bash
+kbmdx worktrees [--check]
+```
+
+Lists git worktrees associated with tasks. `--check` detects stale metadata
+and orphan worktrees.
+
+### import
+
+```bash
+kbmdx import [FILE]
+```
+
+Bulk-creates tasks from a JSON/YAML spec file. Use `"-"` for stdin.
+
+### config
+
+```bash
+kbmdx config get KEY
+kbmdx config set KEY VALUE
+```
+
+Get or set board configuration. Keys use dot-separated paths (e.g., `board.name`,
+`defaults.status`, `defaults.priority`, `claim_timeout`).
 
 ### Global Flags
 
@@ -359,4 +456,6 @@ kbmdx list --compact --status in-progress,review   # all active/parked work
 - **DO NOT** hardcode status or priority values. Read them from `kbmdx board --compact`.
 - **DO NOT** use `--next` or `--prev` without checking current status. They fail at boundary statuses.
 - **DO NOT** pass both `--status` and `--next`/`--prev` to move. Use one or the other.
+- **DO** use `--depend` / `--undepend` (not `--add-dep` / `--remove-dep`) for dependency edits.
+- **DO** track branch and worktree on tasks when using worktrees: `kbmdx edit ID --branch BRANCH --worktree PATH`.
 - **DO** quote task titles with special characters: `kbmdx create "Fix: the 'login' bug"`.

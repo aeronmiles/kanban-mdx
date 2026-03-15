@@ -102,6 +102,8 @@ pub enum Commands {
     Skill(super::skill::SkillArgs),
     /// Manage semantic search embeddings.
     Embed(super::embed::EmbedArgs),
+    /// Open a markdown file in the reader view.
+    Read(super::read::ReadArgs),
 }
 
 /// Execute the parsed CLI command.
@@ -142,6 +144,7 @@ pub fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Gitignore(args) => super::gitignore::run(&cli, args.clone()),
         Commands::Skill(args) => super::skill::run(&cli, args.clone()),
         Commands::Embed(args) => super::embed::run(&cli, args.clone()),
+        Commands::Read(args) => super::read::run(&cli, args.clone()),
     };
 
     result.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)

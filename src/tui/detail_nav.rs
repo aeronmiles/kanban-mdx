@@ -173,37 +173,108 @@ impl App {
         offsets
     }
 
+    // ── File-mode heading offsets ──────────────────────────────────
+
+    /// Heading offsets for file-reader mode (no task, uses build_file_lines).
+    pub(crate) fn heading_offsets_for_file(
+        &mut self,
+        body: &str,
+        exact_level: Option<usize>,
+        content_width: u16,
+    ) -> Vec<usize> {
+        let bq = (self.brightness * THEME_QUANTIZE) as i32;
+        let sq = (self.saturation * THEME_QUANTIZE) as i32;
+
+        // Check cache (task_id=0 for file mode).
+        if let Some(ref entry) = self.detail.heading_cache {
+            if entry.task_id == 0
+                && entry.body == body
+                && entry.theme == self.theme_kind
+                && entry.brightness_q == bq
+                && entry.saturation_q == sq
+                && entry.content_width == content_width
+                && entry.fold_level == self.detail.fold_level
+            {
+                return match exact_level {
+                    None => entry.offsets_any.clone(),
+                    Some(2) => entry.offsets_l2.clone(),
+                    Some(level) => Self::compute_level_offsets(
+                        &entry.body_line_texts,
+                        entry.meta_count,
+                        level,
+                    ),
+                };
+            }
+        }
+
+        let rendered = super::render::build_file_lines(self, body, content_width);
+
+        let mut line_texts: Vec<String> = Vec::with_capacity(rendered.lines.len());
+        let mut all_headings: Vec<usize> = Vec::new();
+        let mut l2_headings: Vec<usize> = Vec::new();
+
+        for (i, line) in rendered.lines.iter().enumerate() {
+            let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+            let is_code = line.style.bg.is_some();
+            if !is_code {
+                if let Some(first_span) = line.spans.first() {
+                    let content = first_span.content.as_ref();
+                    if content.starts_with('#') {
+                        all_headings.push(i);
+                        if !content.starts_with("###") {
+                            l2_headings.push(i);
+                        }
+                    }
+                }
+            }
+            line_texts.push(text);
+        }
+
+        let collapsed_line_indices = Self::collapse_rendered_headings(&all_headings, &line_texts);
+        let offsets_any: Vec<usize> = collapsed_line_indices
+            .iter()
+            .map(|&idx| rendered.line_to_vrow(idx))
+            .collect();
+        let offsets_l2: Vec<usize> = l2_headings
+            .iter()
+            .map(|&idx| rendered.line_to_vrow(idx))
+            .collect();
+
+        // No metadata lines in file mode.
+        let body_line_texts = line_texts.clone();
+
+        self.detail.heading_cache = Some(HeadingOffsetsCache {
+            task_id: 0,
+            body: body.to_string(),
+            theme: self.theme_kind,
+            brightness_q: bq,
+            saturation_q: sq,
+            content_width,
+            fold_level: self.detail.fold_level,
+            offsets_any: offsets_any.clone(),
+            offsets_l2: offsets_l2.clone(),
+            body_line_texts,
+            meta_count: 0,
+        });
+
+        match exact_level {
+            None => offsets_any,
+            Some(2) => offsets_l2,
+            Some(level) => {
+                let line_indices = Self::compute_level_offsets(
+                    &self.detail.heading_cache.as_ref().unwrap().body_line_texts,
+                    0,
+                    level,
+                );
+                line_indices
+                    .iter()
+                    .map(|&idx| rendered.line_to_vrow(idx))
+                    .collect()
+            }
+        }
+    }
+
     // ── Heading navigation ───────────────────────────────────────────
-
-    pub(crate) fn reader_next_heading(&mut self) {
-        if let Some(task) = self.active_task().cloned() {
-            let w = self.reader_content_width();
-            let offsets = self.heading_offsets(&task, None, w);
-            for &off in &offsets {
-                if off > self.reader_scroll {
-                    self.reader_scroll = off;
-                    return;
-                }
-            }
-        }
-    }
-
-    pub(crate) fn reader_prev_heading(&mut self) {
-        if let Some(task) = self.active_task().cloned() {
-            let w = self.reader_content_width();
-            let offsets = self.heading_offsets(&task, None, w);
-            let mut target = None;
-            for &off in &offsets {
-                if off >= self.reader_scroll {
-                    break;
-                }
-                target = Some(off);
-            }
-            if let Some(t) = target {
-                self.reader_scroll = t;
-            }
-        }
-    }
 
     pub(crate) fn reader_next_heading_level(&mut self, level: usize) {
         if let Some(task) = self.active_task().cloned() {
@@ -236,73 +307,98 @@ impl App {
     }
 
     pub(crate) fn detail_next_heading(&mut self) {
-        if let Some(task) = self.active_task().cloned() {
-            let w = self.detail_content_width();
-            let offsets = self.heading_offsets(&task, None, w);
-            for &off in &offsets {
-                if off > self.detail.scroll {
-                    self.detail.scroll = off;
-                    return;
-                }
+        let w = self.detail_content_width();
+        let offsets = if let Some(ref fv) = self.file_view {
+            let body = fv.body.clone();
+            self.heading_offsets_for_file(&body, None, w)
+        } else if let Some(task) = self.active_task().cloned() {
+            self.heading_offsets(&task, None, w)
+        } else {
+            return;
+        };
+        for &off in &offsets {
+            if off > self.detail.scroll {
+                self.detail.scroll = off;
+                return;
             }
         }
     }
 
     pub(crate) fn detail_prev_heading(&mut self) {
-        if let Some(task) = self.active_task().cloned() {
-            let w = self.detail_content_width();
-            let offsets = self.heading_offsets(&task, None, w);
-            let mut target = None;
-            for &off in &offsets {
-                if off >= self.detail.scroll {
-                    break;
-                }
-                target = Some(off);
+        let w = self.detail_content_width();
+        let offsets = if let Some(ref fv) = self.file_view {
+            let body = fv.body.clone();
+            self.heading_offsets_for_file(&body, None, w)
+        } else if let Some(task) = self.active_task().cloned() {
+            self.heading_offsets(&task, None, w)
+        } else {
+            return;
+        };
+        let mut target = None;
+        for &off in &offsets {
+            if off >= self.detail.scroll {
+                break;
             }
-            if let Some(t) = target {
-                self.detail.scroll = t;
-            }
+            target = Some(off);
+        }
+        if let Some(t) = target {
+            self.detail.scroll = t;
         }
     }
 
     pub(crate) fn detail_next_heading_level(&mut self, level: usize) {
-        if let Some(task) = self.active_task().cloned() {
-            let w = self.detail_content_width();
-            let offsets = self.heading_offsets(&task, Some(level), w);
-            for &off in &offsets {
-                if off > self.detail.scroll {
-                    self.detail.scroll = off;
-                    return;
-                }
+        let w = self.detail_content_width();
+        let offsets = if let Some(ref fv) = self.file_view {
+            let body = fv.body.clone();
+            self.heading_offsets_for_file(&body, Some(level), w)
+        } else if let Some(task) = self.active_task().cloned() {
+            self.heading_offsets(&task, Some(level), w)
+        } else {
+            return;
+        };
+        for &off in &offsets {
+            if off > self.detail.scroll {
+                self.detail.scroll = off;
+                return;
             }
         }
     }
 
     pub(crate) fn detail_prev_heading_level(&mut self, level: usize) {
-        if let Some(task) = self.active_task().cloned() {
-            let w = self.detail_content_width();
-            let offsets = self.heading_offsets(&task, Some(level), w);
-            let mut target = None;
-            for &off in &offsets {
-                if off >= self.detail.scroll {
-                    break;
-                }
-                target = Some(off);
+        let w = self.detail_content_width();
+        let offsets = if let Some(ref fv) = self.file_view {
+            let body = fv.body.clone();
+            self.heading_offsets_for_file(&body, Some(level), w)
+        } else if let Some(task) = self.active_task().cloned() {
+            self.heading_offsets(&task, Some(level), w)
+        } else {
+            return;
+        };
+        let mut target = None;
+        for &off in &offsets {
+            if off >= self.detail.scroll {
+                break;
             }
-            if let Some(t) = target {
-                self.detail.scroll = t;
-            }
+            target = Some(off);
+        }
+        if let Some(t) = target {
+            self.detail.scroll = t;
         }
     }
 
     /// Jump to the Nth `##` heading (0-indexed) in the detail view.
     pub(crate) fn detail_goto_heading_index(&mut self, index: usize) {
-        if let Some(task) = self.active_task().cloned() {
-            let w = self.detail_content_width();
-            let offsets = self.heading_offsets(&task, Some(2), w);
-            if let Some(&off) = offsets.get(index) {
-                self.detail.scroll = off;
-            }
+        let w = self.detail_content_width();
+        let offsets = if let Some(ref fv) = self.file_view {
+            let body = fv.body.clone();
+            self.heading_offsets_for_file(&body, Some(2), w)
+        } else if let Some(task) = self.active_task().cloned() {
+            self.heading_offsets(&task, Some(2), w)
+        } else {
+            return;
+        };
+        if let Some(&off) = offsets.get(index) {
+            self.detail.scroll = off;
         }
     }
 
@@ -393,9 +489,29 @@ impl App {
             return;
         }
 
-        if let Some(task) = self.active_task().cloned() {
-            let query = self.detail.find_query.to_lowercase();
+        let query = self.detail.find_query.to_lowercase();
 
+        // File-reader mode: match against file body lines.
+        if let Some(ref fv) = self.file_view {
+            let body = fv.body.clone();
+            let w = self.detail_content_width();
+            let _ = self.heading_offsets_for_file(&body, None, w);
+
+            let mut new_matches: Vec<usize> = Vec::new();
+            if let Some(ref entry) = self.detail.heading_cache {
+                if entry.task_id == 0 && entry.body == body {
+                    for (i, text) in entry.body_line_texts.iter().enumerate() {
+                        if text.to_lowercase().contains(&query) {
+                            new_matches.push(entry.meta_count + i);
+                        }
+                    }
+                }
+            }
+            self.detail.find_matches.extend(new_matches);
+            return;
+        }
+
+        if let Some(task) = self.active_task().cloned() {
             // Check title.
             if task.title.to_lowercase().contains(&query) {
                 self.detail.find_matches.push(0);
@@ -554,11 +670,16 @@ impl App {
         self.detail.cache = None;
         self.detail.heading_cache = None;
 
-        let task = match self.active_task() {
-            Some(t) => t.clone(),
-            None => return,
+        let content = if let Some(ref fv) = self.file_view {
+            let body = fv.body.clone();
+            super::render::build_file_lines(self, &body, cached_width)
+        } else {
+            let task = match self.active_task() {
+                Some(t) => t.clone(),
+                None => return,
+            };
+            super::render::build_detail_lines(self, &task, cached_width)
         };
-        let content = super::render::build_detail_lines(self, &task, cached_width);
 
         // 3. Collect heading visual-row positions from the NEW rendered lines.
         let new_heading_line_indices: Vec<usize> = content

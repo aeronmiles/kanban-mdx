@@ -73,6 +73,17 @@ pub struct App {
     pub detail: DetailState,
     pub picker: PickerState,
     pub debug: DebugState,
+    pub guide: GuideState,
+
+    /// Loaded markdown file for the file reader view.
+    pub file_view: Option<FileView>,
+    /// File picker state for browsing directories.
+    pub file_picker: FilePickerState,
+
+    /// Input buffer for the block-reason overlay.
+    pub block_reason_input: String,
+    /// View to return to after block-reason overlay is dismissed.
+    pub block_return_view: AppView,
 
     /// Back/forward navigation history (detail-view context transitions only).
     pub jump_list: JumpList,
@@ -217,6 +228,34 @@ impl App {
                 perf_mode: true,
                 needs_redraw: true,
             },
+            file_view: None,
+            file_picker: FilePickerState {
+                cwd: std::path::PathBuf::new(),
+                entries: Vec::new(),
+                cursor: 0,
+                filter: String::new(),
+                path_input_active: false,
+                path_input: String::new(),
+                tab_completions: Vec::new(),
+                tab_idx: 0,
+                tab_prefix: None,
+                return_view: AppView::Board,
+            },
+            guide: GuideState {
+                mode: GuideMode::Index,
+                topic_cursor: 0,
+                topic_filter: String::new(),
+                topic_filter_active: false,
+                scroll: 0,
+                cache: None,
+                fold_level: 0,
+                find_query: String::new(),
+                find_active: false,
+                find_matches: Vec::new(),
+                find_current: 0,
+            },
+            block_reason_input: String::new(),
+            block_return_view: AppView::Board,
             jump_list,
         };
 
@@ -234,6 +273,145 @@ impl App {
 
         app.sort_all_columns();
         app
+    }
+
+    /// Construct a standalone file reader (no board, no config directory).
+    pub fn new_file_reader(path: String, title: String, body: String) -> Self {
+        let cfg = Config::new_default("reader");
+        let search_history = InputHistory::new_ephemeral();
+        let find_history = InputHistory::new_ephemeral();
+        let jump_list = JumpList::new(100);
+
+        Self {
+            columns: Vec::new(),
+            active_col: 0,
+            active_row: 0,
+            view: AppView::Detail,
+            view_mode: ViewMode::Cards,
+            sort_mode: SortMode::ByPriority,
+            time_mode: TimeMode::Created,
+            should_quit: false,
+            status_message: String::new(),
+            status_message_at: None,
+            cfg,
+            reader_open: false,
+            reader_scroll: 0,
+            create_state: CreateState::default(),
+            terminal_width: 80,
+            terminal_height: 24,
+            reader_max_width: 100,
+            reader_width_pct: 50,
+            goto_active: false,
+            goto_input: String::new(),
+            theme_kind: ThemeKind::Dark,
+            brightness: 0.0,
+            saturation: -0.2,
+            help_scroll: 0,
+            help_filter: String::new(),
+            help_filter_active: false,
+            search_help_scroll: 0,
+            search_help_return: AppView::Board,
+            worktree_filter_active: false,
+            hide_empty_columns: false,
+            select_mode: false,
+            search: SearchState {
+                query: String::new(),
+                active: false,
+                history: search_history,
+                tab_prefix: None,
+                tab_idx: 0,
+                sem_last_key: None,
+                sem_pending: false,
+                sem_loading: false,
+                sem_error: None,
+                sem_search_rx: None,
+                sem_scores: HashMap::new(),
+                sem_find_rx: None,
+            },
+            detail: DetailState {
+                scroll: 0,
+                cache: None,
+                heading_cache: None,
+                find_query: String::new(),
+                find_active: false,
+                find_matches: Vec::new(),
+                find_current: 0,
+                find_history,
+                find_tab_prefix: None,
+                find_tab_idx: 0,
+                fold_level: 0,
+            },
+            picker: PickerState {
+                branch_list: Vec::new(),
+                branch_cursor: 0,
+                branch_filter: String::new(),
+                branch_worktree_only: false,
+                context_mode: false,
+                context_task_id: 0,
+                context_label: String::new(),
+                context_items: Vec::new(),
+                context_cursor: 0,
+                context_filter: String::new(),
+                context_worktree_only: false,
+                context_picker_mode: ContextPickerMode::SwitchContext,
+                confirm_branch_name: String::new(),
+                pending_undo_before: None,
+                move_cursor: 0,
+                move_filter: String::new(),
+                move_filter_active: false,
+                delete_cursor: 1,
+            },
+            debug: DebugState {
+                scroll: 0,
+                dbg_build_ms: 0,
+                dbg_render_ms: 0,
+                dbg_lines: 0,
+                dbg_vrows: 0,
+                fps: 0.0,
+                fps_last_frame: Instant::now(),
+                perf_mode: true,
+                needs_redraw: true,
+            },
+            file_view: Some(FileView {
+                path,
+                title,
+                body,
+                standalone: true,
+            }),
+            file_picker: FilePickerState {
+                cwd: std::path::PathBuf::new(),
+                entries: Vec::new(),
+                cursor: 0,
+                filter: String::new(),
+                path_input_active: false,
+                path_input: String::new(),
+                tab_completions: Vec::new(),
+                tab_idx: 0,
+                tab_prefix: None,
+                return_view: AppView::Board,
+            },
+            guide: GuideState {
+                mode: GuideMode::Index,
+                topic_cursor: 0,
+                topic_filter: String::new(),
+                topic_filter_active: false,
+                scroll: 0,
+                cache: None,
+                fold_level: 0,
+                find_query: String::new(),
+                find_active: false,
+                find_matches: Vec::new(),
+                find_current: 0,
+            },
+            block_reason_input: String::new(),
+            block_return_view: AppView::Board,
+            jump_list,
+        }
+    }
+
+    /// Returns `true` when the app is in standalone file-reader mode.
+    pub fn is_file_reader(&self) -> bool {
+        self.file_view.is_some()
     }
 
     // ── Status / FPS ─────────────────────────────────────────────────
@@ -515,17 +693,59 @@ impl App {
             AppView::BranchPicker => self.handle_branch_picker_key(key),
             AppView::ContextPicker => self.handle_context_picker_key(key),
             AppView::ConfirmBranch => self.handle_confirm_branch_key(key),
+            AppView::Guide => self.handle_guide_key(key),
+            AppView::FilePicker => self.handle_file_picker_key(key),
+            AppView::BlockReason => self.handle_block_reason_key(key),
         }
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
+        use crossterm::event::MouseEventKind;
+
         if self.select_mode {
             return;
         }
         self.debug.needs_redraw = true;
         match self.view {
-            AppView::Board => self.handle_board_mouse(mouse),
+            AppView::Board | AppView::Search => self.handle_board_mouse(mouse),
             AppView::Detail => self.handle_detail_mouse(mouse),
+            // Scrollable overlays — translate scroll wheel to offset changes.
+            AppView::Help => match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.help_scroll = self.help_scroll.saturating_sub(3);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.help_scroll += 3;
+                }
+                _ => {}
+            },
+            AppView::SearchHelp => match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.search_help_scroll = self.search_help_scroll.saturating_sub(3);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.search_help_scroll += 3;
+                }
+                _ => {}
+            },
+            AppView::Debug => match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.debug.scroll = self.debug.scroll.saturating_sub(3);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.debug.scroll += 3;
+                }
+                _ => {}
+            },
+            AppView::Guide => match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.guide.scroll = self.guide.scroll.saturating_sub(3);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.guide.scroll += 3;
+                }
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -593,6 +813,25 @@ impl App {
                 .map(|(i, _)| i)
                 .collect()
         }
+    }
+
+    pub(crate) fn open_guide(&mut self) {
+        self.guide.mode = GuideMode::Index;
+        self.guide.topic_cursor = 0;
+        self.guide.topic_filter.clear();
+        self.guide.topic_filter_active = false;
+        self.guide.scroll = 0;
+        self.guide.cache = None;
+        self.guide.fold_level = 0;
+        self.guide.find_query.clear();
+        self.guide.find_active = false;
+        self.guide.find_matches.clear();
+        self.guide.find_current = 0;
+        self.view = AppView::Guide;
+    }
+
+    pub(crate) fn guide_page_size(&self) -> usize {
+        (self.terminal_height as usize).saturating_sub(4).max(1)
     }
 
     pub fn filtered_branches(&self) -> Vec<String> {

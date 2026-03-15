@@ -3,14 +3,14 @@ id: 3
 title: Integrate sembed into kanban-mdx config and search
 status: done
 priority: critical
-created: 2026-03-10T10:17:11.052013Z
-updated: 2026-03-11T07:13:32.080070Z
-started: 2026-03-10T14:12:02.985673Z
-completed: 2026-03-10T14:12:02.985673Z
+created: '2026-03-10T10:17:11.052013Z'
+updated: '2026-03-14T17:47:50.321746Z'
+started: '2026-03-10T14:12:02.985673Z'
+completed: '2026-03-10T14:12:02.985673Z'
 tags:
 - layer-4
 class: standard
-branch: main
+branch: master
 ---
 
 # Integrate sembed into kanban-mdx config and search

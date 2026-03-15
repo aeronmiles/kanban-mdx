@@ -298,3 +298,8 @@
 {"timestamp":"2026-03-13T19:57:01.75957Z","action":"release","task_id":84,"detail":"grison-upgo"}
 {"timestamp":"2026-03-13T19:57:02.067828Z","action":"move","task_id":84,"detail":"in-progress -\u003e done"}
 {"timestamp":"2026-03-14T08:24:49.520632Z","action":"create","task_id":85,"detail":"Migrate embedding index from JSON to SQLite"}
+{"timestamp":"2026-03-14T16:46:33.039257Z","action":"create","task_id":86,"detail":"Add kbmdx read command for standalone markdown file reader"}
+{"timestamp":"2026-03-14T16:52:29.503054Z","action":"create","task_id":87,"detail":"TUI guided documentation system (H key)"}
+{"timestamp":"2026-03-15T09:12:51.752134Z","action":"create","task_id":88,"detail":"TUI: add block/unblock toggle for tasks"}
+{"timestamp":"2026-03-15T09:33:40.290721Z","action":"create","task_id":89,"detail":"Protocol + Adapters: agent integration architecture"}
+{"timestamp":"2026-03-15T09:45:00.191272Z","action":"create","task_id":90,"detail":"Protocol v2 audit: CLI surface keep/change/merge/add/remove"}

@@ -3,14 +3,14 @@ id: 58
 title: GEPA Paper Appendix — Results, Meta-Prompts, and Benchmarks
 status: references
 priority: low
-created: 2026-03-03T00:00:00Z
-updated: 2026-03-13T19:48:45.469347Z
+created: '2026-03-03T00:00:00Z'
+updated: '2026-03-15T09:28:14.793709Z'
 tags:
-    - spark-bo
-    - research
-    - gepa-rlm
+- spark-bo
+- research
+- gepa-rlm
 class: standard
-branch: main
+branch: master
 ---
 
 # A RESULTS (CONTD.)

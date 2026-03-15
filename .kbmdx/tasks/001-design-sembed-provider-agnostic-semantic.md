@@ -3,15 +3,15 @@ id: 1
 title: 'Design sembed: provider-agnostic semantic embeddings library for Go'
 status: done
 priority: high
-created: 2026-03-10T09:59:19.040059Z
-updated: 2026-03-12T19:19:03.515535Z
-started: 2026-03-10T14:45:35.146230Z
-completed: 2026-03-10T14:45:35.146230Z
+created: '2026-03-10T09:59:19.040059Z'
+updated: '2026-03-14T17:38:52.784606Z'
+started: '2026-03-10T14:45:35.146230Z'
+completed: '2026-03-10T14:45:35.146230Z'
 tags:
 - layer-4
 - idea
 class: standard
-branch: main
+branch: master
 ---
 
 # sembed — Provider-Agnostic Semantic Embeddings Library for Go

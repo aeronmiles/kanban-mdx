@@ -1,5 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 
+use chrono::Utc;
+
 use crate::tui::app::{delete_word_back, App, AppView};
 
 impl App {
@@ -155,7 +157,7 @@ impl App {
                     self.detail.find_current = 0;
                     return;
                 }
-                KeyCode::Char('g') => {
+                KeyCode::Char('g') if !self.is_file_reader() => {
                     // Ctrl+G: go-to-task dialog.
                     self.goto_input.clear();
                     self.search.query.clear();
@@ -213,6 +215,18 @@ impl App {
             KeyCode::Char('q') | KeyCode::Esc | KeyCode::Backspace => {
                 if self.select_mode && key.code == KeyCode::Esc {
                     self.toggle_select_mode();
+                } else if let Some(ref fv) = self.file_view {
+                    if fv.standalone {
+                        self.should_quit = true;
+                    } else {
+                        self.file_view = None;
+                        self.detail.find_query.clear();
+                        self.detail.find_matches.clear();
+                        self.detail.find_current = 0;
+                        self.detail.cache = None;
+                        self.detail.heading_cache = None;
+                        self.view = AppView::Board;
+                    }
                 } else {
                     // Save final position without forking forward history.
                     self.exit_jump();
@@ -262,11 +276,11 @@ impl App {
             KeyCode::Char('G') | KeyCode::End => {
                 self.detail.scroll = usize::MAX / 2;
             }
-            KeyCode::Char(')') | KeyCode::Char('}') => {
+            KeyCode::Char('}') => {
                 // Next heading.
                 self.detail_next_heading();
             }
-            KeyCode::Char('(') | KeyCode::Char('{') => {
+            KeyCode::Char('{') => {
                 // Previous heading.
                 self.detail_prev_heading();
             }
@@ -289,7 +303,28 @@ impl App {
                     self.find_prev();
                 }
             }
-            KeyCode::Char('m') => {
+            KeyCode::Char('B') if !self.is_file_reader() => {
+                if let Some(task) = self.active_task() {
+                    if task.blocked {
+                        let id = task.id;
+                        let col = self.active_col;
+                        let row = self.active_row;
+                        if let Some(t) = self.columns.get_mut(col).and_then(|c| c.tasks.get_mut(row)) {
+                            t.blocked = false;
+                            t.block_reason.clear();
+                            t.updated = Utc::now();
+                        }
+                        self.persist_task(col, row);
+                        self.detail.cache = None;
+                        self.set_status(format!("Unblocked #{}", id));
+                    } else {
+                        self.block_reason_input.clear();
+                        self.block_return_view = AppView::Detail;
+                        self.view = AppView::BlockReason;
+                    }
+                }
+            }
+            KeyCode::Char('m') if !self.is_file_reader() => {
                 if self.active_task().is_some() {
                     self.picker.move_cursor = 0;
                     self.picker.move_filter.clear();
@@ -302,15 +337,25 @@ impl App {
                 self.toggle_select_mode();
             }
             KeyCode::Char('y') => {
-                // Yank: copy task title + body to clipboard (vim yy).
-                self.copy_task_content();
+                if self.is_file_reader() {
+                    self.copy_file_content();
+                } else {
+                    self.copy_task_content();
+                }
             }
             KeyCode::Char('Y') => {
-                // Yank path: copy task file path to clipboard.
-                self.copy_task_path();
+                if self.is_file_reader() {
+                    self.copy_file_path();
+                } else {
+                    self.copy_task_path();
+                }
             }
             KeyCode::Char('o') => {
-                self.open_in_editor();
+                if self.is_file_reader() {
+                    self.open_file_in_editor();
+                } else {
+                    self.open_in_editor();
+                }
             }
             KeyCode::Char('>') => {
                 self.adjust_reader_max_width(10);
@@ -343,7 +388,7 @@ impl App {
                 self.detail.find_matches.clear();
                 self.detail.find_current = 0;
             }
-            KeyCode::Char(':') => {
+            KeyCode::Char(':') if !self.is_file_reader() => {
                 // Goto task by ID (matches Go TUI's ':' binding).
                 self.goto_input.clear();
                 self.search.query.clear();
@@ -376,6 +421,12 @@ impl App {
                 self.brightness = (self.brightness - 0.05).max(-1.0);
                 self.set_status(format!("Brightness: {:+.0}%", self.brightness * 100.0));
                 self.persist_tui_state();
+            }
+            KeyCode::Char('H') => {
+                self.open_guide();
+            }
+            KeyCode::Char('O') if !self.is_file_reader() => {
+                self.open_file_picker();
             }
             _ => {}
         }

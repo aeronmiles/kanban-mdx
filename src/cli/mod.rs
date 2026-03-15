@@ -23,6 +23,7 @@ pub mod metrics;
 pub mod migrate_config;
 pub mod move_cmd;
 pub mod pick;
+pub mod read;
 pub mod root;
 pub mod show;
 pub mod skill;

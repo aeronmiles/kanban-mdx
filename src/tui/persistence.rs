@@ -35,6 +35,9 @@ impl App {
     /// Sync sort_mode, time_mode, list_mode, theme, brightness, and saturation
     /// to config and save to disk.
     pub(crate) fn persist_tui_state(&mut self) {
+        if self.is_file_reader() {
+            return;
+        }
         self.cfg.tui.sort_mode = match self.sort_mode {
             SortMode::ByPriority => 0,
             SortMode::Newest => 1,
@@ -56,6 +59,14 @@ impl App {
     }
 
     pub(crate) fn adjust_reader_max_width(&mut self, delta: i16) {
+        if self.is_file_reader() {
+            // Adjust in memory only — no config file to persist.
+            let current = self.reader_max_width as i16;
+            let new_val = (current + delta).max(30).min(200);
+            self.reader_max_width = new_val as u16;
+            self.set_status(format!("Detail width: {}", self.reader_max_width));
+            return;
+        }
         let current = self.reader_max_width as i16;
         let new_val = (current + delta).max(30).min(200);
         self.reader_max_width = new_val as u16;

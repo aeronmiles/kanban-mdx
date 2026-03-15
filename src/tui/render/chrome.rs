@@ -261,6 +261,9 @@ pub(super) fn render_reader_panel(app: &mut App, frame: &mut Frame, area: Rect) 
     let t0 = std::time::Instant::now();
     let content = build_detail_lines(app, &task, inner.width);
     let t1 = std::time::Instant::now();
+    // Clamp scroll to document bounds so subsequent saturating_sub works.
+    let max_scroll = content.total_vrows().saturating_sub(1);
+    app.reader_scroll = app.reader_scroll.min(max_scroll);
     render_scrolled_content(&content, app.reader_scroll, inner, frame, None);
     let t2 = std::time::Instant::now();
     app.debug.dbg_build_ms = t1.duration_since(t0).as_millis();

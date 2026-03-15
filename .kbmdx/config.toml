@@ -7,7 +7,7 @@ priorities = [
     "critical",
 ]
 claim_timeout = "1h"
-next_id = 86
+next_id = 91
 
 [board]
 name = "kanban-mdx"
@@ -62,13 +62,13 @@ collapsed_columns = [
     "todo",
     "in-progress",
     "review",
-    "references",
+    "done",
 ]
 sort_mode = 1
-reader_max_width = 120
+reader_max_width = 130
 reader_width_pct = 70
 brightness = -0.000000007450581
-saturation = -0.000000014901161
+saturation = -0.10000002
 
 [[tui.age_thresholds]]
 after = "0s"

@@ -214,6 +214,47 @@ impl App {
         }
     }
 
+    // ── File-reader clipboard / editor actions ────────────────────
+
+    pub(crate) fn copy_file_content(&mut self) {
+        if let Some(ref fv) = self.file_view {
+            let text = fv.body.clone();
+            let title = fv.title.clone();
+            Self::copy_to_clipboard(&text);
+            self.set_status(format!("Copied content: {}", title));
+        }
+    }
+
+    pub(crate) fn copy_file_path(&mut self) {
+        if let Some(ref fv) = self.file_view {
+            let path = fv.path.clone();
+            Self::copy_to_clipboard(&path);
+            self.set_status(format!("Copied: {}", path));
+        }
+    }
+
+    pub(crate) fn open_file_in_editor(&mut self) {
+        if let Some(ref fv) = self.file_view {
+            let file = fv.path.clone();
+            if let Some(cmd) = Self::detect_gui_editor() {
+                use std::process::{Command, Stdio};
+                let result = Command::new(&cmd)
+                    .arg(&file)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn();
+                match result {
+                    Ok(_) => self.set_status(format!("Opened in {cmd}")),
+                    Err(e) => self.set_status(format!("Failed to open in {cmd}: {e}")),
+                }
+            } else {
+                let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+                self.set_status(format!("Run: {} {}", editor, file));
+            }
+        }
+    }
+
     /// Detect a GUI editor from the current terminal environment.
     /// Returns the CLI command to use, or `None` if no GUI editor is detected.
     fn detect_gui_editor() -> Option<String> {
